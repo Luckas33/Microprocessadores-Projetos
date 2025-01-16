@@ -18,9 +18,15 @@ module Processador (
     Register regB(.clk(clk), .reset(reset), .data_in(operand2), .data_out(regB_out));
     Register regC(.clk(clk), .reset(reset), .data_in(ula_result), .data_out(regC_out));
 
+    // Instância do Controller
+    Controller controller(
+        .opcode(opcode),
+        .ula_operation(ula_operation)
+    );
+
     // Instância da ULA
     ULA ula(
-        .opcode(opcode),
+        .opcode(ula_operation),
         .operand1(regA_out),
         .operand2(regB_out),
         .result(ula_result),
