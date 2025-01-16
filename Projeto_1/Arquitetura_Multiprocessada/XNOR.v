@@ -13,3 +13,4 @@ module XNOR (
                 result[i] = 1'b0;
         end
     end
+endmodule
