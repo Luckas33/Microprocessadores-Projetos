@@ -1,7 +1,8 @@
 module ADD (
     input [7:0] a,
     input [7:0] b,
-    output [7:0] result
+    output [7:0] result,
+    output [3:0] status_flags
 );
     wire [7:0] carry;
 
@@ -16,6 +17,11 @@ module ADD (
     full_adder FA5(.a(a[5]), .b(b[5]), .cin(carry[4]), .sum(result[5]), .cout(carry[5]));
     full_adder FA6(.a(a[6]), .b(b[6]), .cin(carry[5]), .sum(result[6]), .cout(carry[6]));
     full_adder FA7(.a(a[7]), .b(b[7]), .cin(carry[6]), .sum(result[7]), .cout(carry[7]));
+
+    assign status_flags[0] = (result == 8'b00000000);        // Zero flag (Z)
+    assign status_flags[1] = result[7];                        // Sign flag (S)
+    assign status_flags[2] = carry[7];                         // Carry flag (C)
+    assign status_flags[3] = (a[7] == b[7] && result[7] != a[7]); // Overflow flag (V)
 
 endmodule
 
