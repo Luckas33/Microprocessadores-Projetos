@@ -25,7 +25,7 @@ module SUB (
     assign status_flags[1] = result[7]; 
 
     // Carry flag (C) -> flag de carry é 1 quando não há borrow, então usa a Carry Flag do módulo ADD
-    assign status_flags[2] = status_flags[2];  // A Carry Flag já vem do módulo ADD
+   // A Carry Flag já vem do módulo ADD
 
     // Overflow flag (V) -> ocorre quando os sinais dos operandos são diferentes e o sinal do resultado é incorreto
     assign status_flags[3] = (a[7] != b[7]) && (result[7] == b_complement[7]);
