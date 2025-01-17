@@ -3,13 +3,13 @@ module ULA (
     input [7:0] operand1,
     input [7:0] operand2,
     output reg [7:0] result,
-    output reg [3:0] flags
+    output reg [7:0] flags
 );
 
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
     wire [3:0] add_flags, sub_flags, mul_flags;
-
+    
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
     SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
@@ -41,20 +41,20 @@ module ULA (
             result = mul_result;    // MUL
             flags = mul_flags;      // Atualiza as flags para MUL
         end
-        4'b0100: begin
+        4'b0100: begin 
             result = div_result;
-            if (b == 8'b0) begin
+            if (operand2 == 8'b0) begin  // Corrigir de 'b' para 'operand2'
                 result = 8'b0;  // Resultado 0 por erro de divisão (divisão por zero)
                 flags[0] = 1;   // Zero flag (Z) - resultado é zero
                 flags[1] = 0;   // Sign flag (S) - divisão por zero, não faz sentido aplicar
                 flags[2] = 1;   // Carry flag (C) - erro de divisão por zero
                 flags[3] = 0;   // Overflow flag (V) - não se aplica para divisão
-           end else begin 
+            end else begin 
                 flags[0] = (result == 8'b00000000);  // Zero flag (Z) - se o resultado é zero
                 flags[1] = result[7];                // Sign flag (S) - se o bit mais significativo é 1
                 flags[2] = 0;                        // Carry flag (C) - não se aplica diretamente
                 flags[3] = 0;                        // Overflow flag (V) - não se aplica diretamente
-           end
+            end
         end
 
         4'b0101: begin 

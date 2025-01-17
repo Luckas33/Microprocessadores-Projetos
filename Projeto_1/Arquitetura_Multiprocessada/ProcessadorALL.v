@@ -21,7 +21,7 @@ module ADD (
     assign status_flags[0] = (result == 8'b00000000);        // Zero flag (Z)
     assign status_flags[1] = result[7];                        // Sign flag (S)
     assign status_flags[2] = carry[7];                         // Carry flag (C)
-    assign status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
+    assign status_flags[3] = (a[7] == b[7] && result[7] != a[7]); // Overflow flag (V)
 
 endmodule
 
