@@ -9,6 +9,7 @@ module Processador (
 );
 
     // Conexões internas
+    wire [3:0] ula_operation;
     wire [7:0] ula_result;
     wire [7:0] regA_out, regB_out, regC_out;
     wire [7:0] ula_flags;

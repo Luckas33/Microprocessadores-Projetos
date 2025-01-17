@@ -50,6 +50,7 @@ module full_adder (
     assign cout = c1 | c2;
 endmodule
 
+
 module SUB (
     input [7:0] a,
     input [7:0] b,
@@ -77,13 +78,14 @@ module SUB (
     assign status_flags[1] = result[7]; 
 
     // Carry flag (C) -> flag de carry é 1 quando não há borrow, então usa a Carry Flag do módulo ADD
-    // A Carry Flag já vem do módulo ADD
+   // A Carry Flag já vem do módulo ADD
 
     // Overflow flag (V) -> ocorre quando os sinais dos operandos são diferentes e o sinal do resultado é incorreto
     assign status_flags[3] = (a[7] != b[7]) && (result[7] == b_complement[7]);
 
 endmodule
- 
+
+
 
 module MUL (
     input [7:0] a,          // Primeiro operando
@@ -134,6 +136,7 @@ module MUL (
         status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
     end
 endmodule
+
 
 module DIV(
     input [7:0] a,         // Dividendo
@@ -513,4 +516,32 @@ module Processador (
     assign result = regC_out;
     assign flags = ula_flags;
 
+endmodule
+
+module InstructionLoader (
+    output reg [7:0] opcode,       // Opcode da instrução
+    output reg [7:0] operand1,     // Primeiro operando
+    output reg [7:0] operand2,     // Segundo operando
+    input clk,                     // Clock para controle de execução
+    input reset                    // Reset do contador
+);
+    reg [7:0] memory [0:255];      // Memória para carregar as instruções
+    reg [7:0] pc;                  // Contador de programa (PC)
+
+    initial begin
+        // Carrega o arquivo binário na memória
+        $readmemb("instructions.bin", memory);
+    end
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            pc <= 0;               // Reinicia o contador de programa
+        end else begin
+            // Decodifica a instrução atual
+            opcode <= memory[pc];
+            operand1 <= memory[pc + 1];
+            operand2 <= memory[pc + 2];
+            pc <= pc + 3;          // Avança para a próxima instrução
+        end
+    end
 endmodule
