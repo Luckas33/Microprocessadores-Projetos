@@ -1,7 +1,8 @@
 module ADD (
     input [7:0] a,
     input [7:0] b,
-    output [7:0] result
+    output [7:0] result,
+    output [3:0] status_flags
 );
     wire [7:0] carry;
 
@@ -16,6 +17,11 @@ module ADD (
     full_adder FA5(.a(a[5]), .b(b[5]), .cin(carry[4]), .sum(result[5]), .cout(carry[5]));
     full_adder FA6(.a(a[6]), .b(b[6]), .cin(carry[5]), .sum(result[6]), .cout(carry[6]));
     full_adder FA7(.a(a[7]), .b(b[7]), .cin(carry[6]), .sum(result[7]), .cout(carry[7]));
+
+    assign status_flags[0] = (result == 8'b00000000);        // Zero flag (Z)
+    assign status_flags[1] = result[7];                        // Sign flag (S)
+    assign status_flags[2] = carry[7];                         // Carry flag (C)
+    assign status_flags[3] = (a[7] == b[7] && result[7] != a[7]); // Overflow flag (V)
 
 endmodule
 
@@ -47,22 +53,43 @@ endmodule
 module SUB (
     input [7:0] a,
     input [7:0] b,
-    output [7:0] result
+    output [7:0] result,
+    output [3:0] status_flags
 );
     wire [7:0] b_complement;
-
+    
     // Calcular complemento de dois do operando B
     assign b_complement = ~b + 1;
 
     // Somar A + (~B + 1) (usando o módulo ADD já implementado)
-    ADD adder(.a(a), .b(b_complement), .result(result));
+    ADD adder(
+        .a(a),
+        .b(b_complement),
+        .result(result),
+        .status_flags({status_flags[3], status_flags[2], status_flags[1], status_flags[0]})
+    );
+
+    // Flags de status para subtração:
+    // Zero flag (Z) -> se o resultado for 0
+    assign status_flags[0] = (result == 8'b00000000); 
+
+    // Sign flag (S) -> se o bit mais significativo do resultado for 1
+    assign status_flags[1] = result[7]; 
+
+    // Carry flag (C) -> flag de carry é 1 quando não há borrow, então usa a Carry Flag do módulo ADD
+    // A Carry Flag já vem do módulo ADD
+
+    // Overflow flag (V) -> ocorre quando os sinais dos operandos são diferentes e o sinal do resultado é incorreto
+    assign status_flags[3] = (a[7] != b[7]) && (result[7] == b_complement[7]);
 
 endmodule
+ 
 
 module MUL (
     input [7:0] a,          // Primeiro operando
     input [7:0] b,          // Segundo operando
-    output reg [7:0] result // Resultado da multiplicação
+    output reg [7:0] result, // Resultado da multiplicação
+    output reg [3:0] status_flags
 );
     reg [7:0] temp_a;       // Valor deslocado de 'a'
     reg [7:0] temp_b;       // Valor deslocado de 'b'
@@ -92,6 +119,19 @@ module MUL (
 
         // Retorna apenas os 8 bits menos significativos
         result = product[7:0];
+
+        // Cálculo das flags:
+        // Zero flag (Z) -> se o resultado for 0
+        status_flags[0] = (result == 8'b00000000);
+
+        // Sign flag (S) -> se o bit mais significativo do resultado for 1
+        status_flags[1] = result[7];
+
+        // Carry flag (C) -> se houver overflow do produto para além de 8 bits
+        status_flags[2] = (product[15:8] != 8'b00000000); // Se os 8 bits mais significativos do produto não são zero, houve carry
+
+        // Overflow flag (V) -> ocorre quando dois números de sinais iguais produzem um resultado de sinal oposto
+        status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
     end
 endmodule
 
@@ -271,19 +311,20 @@ module ULA (
     input [7:0] operand1,
     input [7:0] operand2,
     output reg [7:0] result,
-    output reg [7:0] flags
+    output reg [3:0] flags
 );
 
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
+    wire [3:0] add_flags, sub_flags, mul_flags;
 
     // Instância dos módulos matemáticos
-    ADD add(.a(operand1), .b(operand2), .result(add_result));
-    SUB sub(.a(operand1), .b(operand2), .result(sub_result));
-    MUL mul(.a(operand1), .b(operand2), .result(mul_result));
+    ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
+    SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
+    MUL mul(.a(operand1), .b(operand2), .result(mul_result), .status_flags(mul_flags));
     DIV div(.a(operand1), .b(operand2), .result(div_result));
     MOD mod(.a(operand1), .b(operand2), .result(mod_result));
-
+    
     // Instância dos módulos lógicos
     AND and_gate(.a(operand1), .b(operand2), .result(and_result));
     OR or_gate(.a(operand1), .b(operand2), .result(or_result));
@@ -294,32 +335,101 @@ module ULA (
     XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
 
     always @(*) begin
-        // Decodifica a operação
-        case (ula_operation)
-            4'b0001: result = add_result;  // ADD
-            4'b0010: result = sub_result;  // SUB
-            4'b0011: result = mul_result;  // MUL
-            4'b0100: result = div_result;  // DIV
-            4'b0101: result = mod_result;  // MOD
-            4'b0110: result = and_result;  // AND
-            4'b0111: result = or_result;   // OR
-            4'b1000: result = xor_result;  // XOR
-            4'b1001: result = not_result;  // NOT
-            4'b1010: result = nor_result;  // NOR
-            4'b1011: result = nand_result; // NAND
-            4'b1100: result = xnor_result; // XNOR
-            default: result = 8'b0;        // Operação inválida
-        endcase
-    end
+    // Decodifica a operação
+    case (ula_operation)
+        4'b0001: begin
+            result = add_result;    // ADD
+            flags = add_flags;      // Atualiza as flags para ADD
+        end
+        4'b0010: begin
+            result = sub_result;    // SUB
+            flags = sub_flags;      // Atualiza as flags para SUB
+        end
+        4'b0011: begin
+            result = mul_result;    // MUL
+            flags = mul_flags;      // Atualiza as flags para MUL
+        end
+        4'b0100: begin
+            result = div_result;
+            if (b == 8'b0) begin
+                result = 8'b0;  // Resultado 0 por erro de divisão (divisão por zero)
+                flags[0] = 1;   // Zero flag (Z) - resultado é zero
+                flags[1] = 0;   // Sign flag (S) - divisão por zero, não faz sentido aplicar
+                flags[2] = 1;   // Carry flag (C) - erro de divisão por zero
+                flags[3] = 0;   // Overflow flag (V) - não se aplica para divisão
+           end else begin 
+                flags[0] = (result == 8'b00000000);  // Zero flag (Z) - se o resultado é zero
+                flags[1] = result[7];                // Sign flag (S) - se o bit mais significativo é 1
+                flags[2] = 0;                        // Carry flag (C) - não se aplica diretamente
+                flags[3] = 0;                        // Overflow flag (V) - não se aplica diretamente
+           end
+        end
 
-    always @(*) begin
-    flags[0] = (result == 0); // Zero Flag
-    flags[1] = carry_flag;    // Carry Flag
-    flags[2] = result[15];    // Sinal (bit mais significativo)
-    flags[3] = ~^result;      // Paridade (XOR de todos os bits)
-    flags[4] = 0;             // Interrupção (não usado no momento)
-    flags[5] = 0;             // Direção (não usado no momento)
-    flags[6] = overflow_flag; // Overflow (calculado separadamente)
+        4'b0101: begin 
+           result = mod_result; // MOD
+          flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
+          flags[1] = mod_result[7]; // Sign flag (S)
+          flags[2] = 0; // Carry flag (não se aplica para MOD)
+          flags[3] = 0; // Overflow flag (não se aplica para MOD)
+        end
+
+        4'b0110: begin 
+            result = and_result;  // AND
+            flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = and_result[7]; // Sign flag (S)
+            flags[2] = 0; //carry(não se aplica)
+            flags[3] = 0; //overflow (não se aplica)
+        end
+            4'b0111: begin 
+            result = or_result;   // OR
+            flags[0] = (or_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = or_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        4'b1000: begin 
+            result = xor_result;  // XOR
+            flags[0] = (xor_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = xor_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        4'b1001: begin 
+            result = not_result;  // NOT
+            flags[0] = (not_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = not_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        4'b1010: begin 
+            result = nor_result;  // NOR
+            flags[0] = (nor_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = nor_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        4'b1011: begin 
+            result = nand_result; // NAND
+            flags[0] = (nand_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = nand_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        4'b1100: begin 
+            result = xnor_result; // XNOR
+            flags[0] = (xnor_result == 8'b00000000); // Zero flag (Z)
+            flags[1] = xnor_result[7]; // Sign flag (S)
+            flags[2] = 0; // carry (não se aplica)
+            flags[3] = 0; // overflow (não se aplica)
+        end
+
+        default: result = 8'b0;        // Operação inválida
+        endcase
     end
 
 endmodule
