@@ -14,8 +14,8 @@ module ULA (
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
     SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
     MUL mul(.a(operand1), .b(operand2), .result(mul_result), .status_flags(mul_flags));
-    DIV div(.a(operand1), .b(operand2), .result(div_result), .status_flags(div_flags));
-    MOD mod(.a(operand1), .b(operand2), .result(mod_result), .status_flags(mod_flags));
+    DIV div(.a(operand1), .b(operand2), .result(div_result));
+    MOD mod(.a(operand1), .b(operand2), .result(mod_result));
     
     // Instância dos módulos lógicos
     AND and_gate(.a(operand1), .b(operand2), .result(and_result));
@@ -42,9 +42,21 @@ module ULA (
             flags = mul_flags;      // Atualiza as flags para MUL
         end
         4'b0100: begin
-            result = div_result;    // DIV
-            flags = div_flags;      // Atualiza as flags para DIV
+            result = div_result;
+            if (b == 8'b0) begin
+                result = 8'b0;  // Resultado 0 por erro de divisão (divisão por zero)
+                flags[0] = 1;   // Zero flag (Z) - resultado é zero
+                flags[1] = 0;   // Sign flag (S) - divisão por zero, não faz sentido aplicar
+                flags[2] = 1;   // Carry flag (C) - erro de divisão por zero
+                flags[3] = 0;   // Overflow flag (V) - não se aplica para divisão
+           end else begin 
+                flags[0] = (result == 8'b00000000);  // Zero flag (Z) - se o resultado é zero
+                flags[1] = result[7];                // Sign flag (S) - se o bit mais significativo é 1
+                flags[2] = 0;                        // Carry flag (C) - não se aplica diretamente
+                flags[3] = 0;                        // Overflow flag (V) - não se aplica diretamente
+           end
         end
+
         4'b0101: begin 
            result = mod_result; // MOD
           flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
