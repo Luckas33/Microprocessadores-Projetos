@@ -8,7 +8,7 @@ module ULA (
 
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
-    wire [3:0] add_flags, sub_flags, mul_flags, div_flags, mod_flags;
+    wire [3:0] add_flags, sub_flags, mul_flags, div_flags;
 
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
@@ -45,10 +45,14 @@ module ULA (
             result = div_result;    // DIV
             flags = div_flags;      // Atualiza as flags para DIV
         end
-        4'b0101: begin
-            result = mod_result;    // MOD
-            flags = mod_flags;      // Atualiza as flags para MOD
+        4'b0101: begin 
+           result = mod_result; // MOD
+          flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
+          flags[1] = mod_result[7]; // Sign flag (S)
+          flags[2] = 0; // Carry flag (não se aplica para MOD)
+          flags[3] = 0; // Overflow flag (não se aplica para MOD)
         end
+
         4'b0110: begin 
             result = and_result;  // AND
             flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
