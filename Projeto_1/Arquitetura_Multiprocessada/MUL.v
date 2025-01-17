@@ -45,5 +45,6 @@ module MUL (
 
         // Overflow flag (V) -> ocorre quando dois números de sinais iguais produzem um resultado de sinal oposto
         status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
+        
     end
 endmodule

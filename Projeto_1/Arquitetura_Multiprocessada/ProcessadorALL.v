@@ -174,7 +174,7 @@ endmodule
 module MOD (
     input [7:0] a,
     input [7:0] b,
-    output [7:0] remainder
+    output [7:0] result
 );
     reg [7:0] r;
     integer i;
@@ -188,7 +188,7 @@ module MOD (
         end
     end
 
-    assign remainder = r;
+    assign result = r;
 endmodule
 
 module AND (
@@ -314,13 +314,13 @@ module ULA (
     input [7:0] operand1,
     input [7:0] operand2,
     output reg [7:0] result,
-    output reg [3:0] flags
+    output reg [7:0] flags
 );
 
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
     wire [3:0] add_flags, sub_flags, mul_flags;
-
+    
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
     SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
@@ -352,20 +352,20 @@ module ULA (
             result = mul_result;    // MUL
             flags = mul_flags;      // Atualiza as flags para MUL
         end
-        4'b0100: begin
+        4'b0100: begin 
             result = div_result;
-            if (b == 8'b0) begin
+            if (operand2 == 8'b0) begin  // Corrigir de 'b' para 'operand2'
                 result = 8'b0;  // Resultado 0 por erro de divisão (divisão por zero)
                 flags[0] = 1;   // Zero flag (Z) - resultado é zero
                 flags[1] = 0;   // Sign flag (S) - divisão por zero, não faz sentido aplicar
                 flags[2] = 1;   // Carry flag (C) - erro de divisão por zero
                 flags[3] = 0;   // Overflow flag (V) - não se aplica para divisão
-           end else begin 
+            end else begin 
                 flags[0] = (result == 8'b00000000);  // Zero flag (Z) - se o resultado é zero
                 flags[1] = result[7];                // Sign flag (S) - se o bit mais significativo é 1
                 flags[2] = 0;                        // Carry flag (C) - não se aplica diretamente
                 flags[3] = 0;                        // Overflow flag (V) - não se aplica diretamente
-           end
+            end
         end
 
         4'b0101: begin 
@@ -491,7 +491,7 @@ module Processador (
     wire [7:0] ula_result;
     wire [7:0] regA_out, regB_out, regC_out;
     wire [7:0] ula_flags;
-
+    wire [3:0] ula_operation;
     // Instância dos registradores
     Register regA(.clk(clk), .reset(reset), .data_in(operand1), .data_out(regA_out));
     Register regB(.clk(clk), .reset(reset), .data_in(operand2), .data_out(regB_out));
@@ -505,7 +505,7 @@ module Processador (
 
     // Instância da ULA
     ULA ula(
-        .opcode(ula_operation),
+        .ula_operation(ula_operation),
         .operand1(regA_out),
         .operand2(regB_out),
         .result(ula_result),
@@ -525,7 +525,7 @@ module InstructionLoader (
     input clk,                     // Clock para controle de execução
     input reset                    // Reset do contador
 );
-    reg [7:0] memory [0:255];      // Memória para carregar as instruções
+  reg [7:0] memory [0:2];      // Memória para carregar as instruções
     reg [7:0] pc;                  // Contador de programa (PC)
 
     initial begin
