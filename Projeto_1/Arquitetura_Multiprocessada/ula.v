@@ -8,7 +8,7 @@ module ULA (
 
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
-    wire [3:0] add_flags, sub_flags, mul_flags, div_flags;
+    wire [3:0] add_flags, sub_flags, mul_flags;
 
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
