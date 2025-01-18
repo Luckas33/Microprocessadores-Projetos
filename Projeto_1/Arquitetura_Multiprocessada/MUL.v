@@ -4,47 +4,40 @@ module MUL (
     output reg [7:0] result, // Resultado da multiplicação
     output reg [3:0] status_flags
 );
+    reg [15:0] product;     // Produto parcial (16 bits para evitar perda de dados)
     reg [7:0] temp_a;       // Valor deslocado de 'a'
     reg [7:0] temp_b;       // Valor deslocado de 'b'
-    reg [7:0] sum;          // Resultado parcial da soma
-    reg [15:0] product;     // Produto parcial
     integer i;
-
-    // Instância do módulo de soma
-    wire [7:0] add_result;
-    ADD adder(.a(product[7:0]), .b(temp_a), .result(add_result));
 
     always @(*) begin
         // Inicialização
-        temp_a = a;
-        temp_b = b;
-        product = 0;
+        product = 0;        // Produto parcial
+        temp_a = a;         // Operando a
+        temp_b = b;         // Operando b
 
-        // Algoritmo de multiplicação (baseado em deslocamentos e somas)
+        // Algoritmo de multiplicação (multiplicação em série)
         for (i = 0; i < 8; i = i + 1) begin
             if (temp_b[0] == 1) begin
-                sum = add_result;   // Soma parcial usando o módulo ADD
-                product[7:0] = sum; // Atualiza os 8 bits menos significativos do produto
+                product = product + temp_a; // Soma 'temp_a' ao produto parcial
             end
-            temp_a = temp_a << 1; // Desloca 'temp_a' para a esquerda (multiplica por 2)
-            temp_b = temp_b >> 1; // Desloca 'temp_b' para a direita (divide por 2)
+            temp_a = temp_a << 1; // Multiplica 'temp_a' por 2
+            temp_b = temp_b >> 1; // Divide 'temp_b' por 2
         end
 
-        // Retorna apenas os 8 bits menos significativos
+        // Resultado: 8 bits menos significativos do produto
         result = product[7:0];
 
-        // Cálculo das flags:
-        // Zero flag (Z) -> se o resultado for 0
+        // Flags
+        // Zero flag (Z): se o resultado for zero
         status_flags[0] = (result == 8'b00000000);
 
-        // Sign flag (S) -> se o bit mais significativo do resultado for 1
+        // Sign flag (S): se o bit mais significativo do resultado for 1
         status_flags[1] = result[7];
 
-        // Carry flag (C) -> se houver overflow do produto para além de 8 bits
-        status_flags[2] = (product[15:8] != 8'b00000000); // Se os 8 bits mais significativos do produto não são zero, houve carry
+        // Carry flag (C): se houve overflow para os bits superiores
+        status_flags[2] = (product[15:8] != 8'b00000000);
 
-        // Overflow flag (V) -> ocorre quando dois números de sinais iguais produzem um resultado de sinal oposto
+        // Overflow flag (V): se dois números de sinais iguais produzem um sinal oposto
         status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
-        
     end
 endmodule
