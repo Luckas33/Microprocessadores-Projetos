@@ -306,6 +306,39 @@ module XNOR (
     end
 endmodule
 
+module BitManipulation ( //Realiza as operações de deslocamento de bit a direita e à esquerda
+    input [7:0] data_in, 
+    input enable_shift,
+    input direction_shift, 
+    input enable_rotate,
+    input direction_rotate,
+    output reg [7:0] data_out,
+    output reg carry
+);
+    always @(*) begin
+        data_out = data_in;
+        carry = 0;
+
+        if (enable_shift) begin
+            if (direction_shift == 0) begin // Shift para a esquerda
+                data_out = data_in << 1;
+                carry = data_in[7];
+            end else begin // Shift para a direita
+                data_out = data_in >> 1;
+                carry = data_in[0];
+            end
+        end else if (enable_rotate) begin
+            if (direction_rotate == 0) begin // Rotate para a esquerda
+                data_out = {data_in[6:0], data_in[7]};
+                carry = data_in[7];
+            end else begin // Rotate para a direita
+                data_out = {data_in[0], data_in[7:1]};
+                carry = data_in[0];
+            end
+        end
+    end
+endmodule
+
 module ULA (
     input [3:0] ula_operation,
     input [7:0] operand1,
@@ -318,6 +351,8 @@ module ULA (
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
     wire [3:0] add_flags, sub_flags, mul_flags;
+    wire [7:0] shift_result;
+    wire carry;
 
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
@@ -335,6 +370,17 @@ module ULA (
     NAND nand_gate(.a(operand1), .b(operand2), .result(nand_result));
     XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
     
+    // Instância do módulo de manipulação de bit
+    BitManipulation u_bit_manipulation (
+    .data_in(operand1),                             // Entrada de dados (operand1)
+    .enable_shift((ula_operation == 4'b1111 || ula_operation == 4'b1110)), // Habilita o deslocamento
+    .direction_shift(ula_operation[0]),             // Direção do deslocamento: 0 para esquerda, 1 para direita
+    .enable_rotate(1'b0),                           // Rotação desativada
+    .direction_rotate(1'b0),                        // Não se aplica
+    .data_out(shift_result),                        // Saída após deslocamento ou rotação
+    .carry(carry)                                   // Sinal de carry (indicando o bit deslocado)
+    );
+
     always @(*) begin
         case (ula_operation)
             4'b0001: begin // ADD
@@ -419,6 +465,21 @@ module ULA (
                 flags[1] = xnor_result[7];              // Sign flag (S)
                 flags[2] = 0;                           // Carry flag (não se aplica)
                 flags[3] = 0;                           // Overflow flag (não se aplica)
+            end
+            // MOV 1101
+            4'b1110: begin // DESLOCAMENTO PRA ESQUERDA
+                flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                flags[1] = result[7];              // Sign flag (S)
+                flags[2] = carry;                  // Carry flag
+                flags[3] = 0;                      // Overflow flag (não se aplica)
+                result = shift_result;
+            end
+            4'b1111: begin // DESLOCAMENTO PRA DIREITA
+                flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                flags[1] = result[7];              // Sign flag (S)
+                flags[2] = carry;                  // Carry flag
+                flags[3] = 0;                      // Overflow flag (não se aplica)
+            	result = shift_result;
             end
             default: begin // Operação inválida
                 result = 8'b0;

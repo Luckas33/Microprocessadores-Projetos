@@ -312,7 +312,7 @@ module BitManipulation (
     input direction_shift, 
     input enable_rotate,
     input direction_rotate,
-    output reg [7:0] data_out,
+  	output reg [7:0] data_out,
     output reg carry
 );
     always @(*) begin
@@ -473,12 +473,14 @@ module ULA (
                 flags[1] = result[7];              // Sign flag (S)
                 flags[2] = carry;                  // Carry flag
                 flags[3] = 0;                      // Overflow flag (não se aplica)
+                result = shift_result;
             end
           4'b1111: begin // DESLOCAMENTO PRA DIREITA
                 flags[0] = (result == 8'b00000000); // Zero flag (Z)
                 flags[1] = result[7];              // Sign flag (S)
                 flags[2] = carry;                  // Carry flag
                 flags[3] = 0;                      // Overflow flag (não se aplica)
+            	result = shift_result;
             end
             default: begin // Operação inválida
                 result = 8'b0;
