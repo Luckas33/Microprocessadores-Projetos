@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module ADD (
     input [7:0] a,
     input [7:0] b,
@@ -91,51 +93,46 @@ module MUL (
     input [7:0] a,          // Primeiro operando
     input [7:0] b,          // Segundo operando
     output reg [7:0] result, // Resultado da multiplicação
-    output reg [3:0] status_flags
+    output reg [3:0] status_flags // Flags de status
 );
+    reg [15:0] product;     // Produto parcial (16 bits para evitar perda de dados)
     reg [7:0] temp_a;       // Valor deslocado de 'a'
     reg [7:0] temp_b;       // Valor deslocado de 'b'
-    reg [7:0] sum;          // Resultado parcial da soma
-    reg [15:0] product;     // Produto parcial
     integer i;
-
-    // Instância do módulo de soma
-    wire [7:0] add_result;
-    ADD adder(.a(product[7:0]), .b(temp_a), .result(add_result));
 
     always @(*) begin
         // Inicialização
-        temp_a = a;
-        temp_b = b;
-        product = 0;
+        product = 0;        // Produto parcial
+        temp_a = a;         // Operando a
+        temp_b = b;         // Operando b
 
-        // Algoritmo de multiplicação (baseado em deslocamentos e somas)
+        // Algoritmo de multiplicação (multiplicação em série)
         for (i = 0; i < 8; i = i + 1) begin
             if (temp_b[0] == 1) begin
-                sum = add_result;   // Soma parcial usando o módulo ADD
-                product[7:0] = sum; // Atualiza os 8 bits menos significativos do produto
+                product = product + temp_a; // Soma 'temp_a' ao produto parcial
             end
-            temp_a = temp_a << 1; // Desloca 'temp_a' para a esquerda (multiplica por 2)
-            temp_b = temp_b >> 1; // Desloca 'temp_b' para a direita (divide por 2)
+            temp_a = temp_a << 1; // Multiplica 'temp_a' por 2
+            temp_b = temp_b >> 1; // Divide 'temp_b' por 2
         end
 
-        // Retorna apenas os 8 bits menos significativos
+        // Resultado: 8 bits menos significativos do produto
         result = product[7:0];
 
-        // Cálculo das flags:
-        // Zero flag (Z) -> se o resultado for 0
+        // Flags
+        // Zero flag (Z): se o resultado for zero
         status_flags[0] = (result == 8'b00000000);
 
-        // Sign flag (S) -> se o bit mais significativo do resultado for 1
+        // Sign flag (S): se o bit mais significativo do resultado for 1
         status_flags[1] = result[7];
 
-        // Carry flag (C) -> se houver overflow do produto para além de 8 bits
-        status_flags[2] = (product[15:8] != 8'b00000000); // Se os 8 bits mais significativos do produto não são zero, houve carry
+        // Carry flag (C): se houve overflow para os bits superiores
+        status_flags[2] = (product[15:8] != 8'b00000000);
 
-        // Overflow flag (V) -> ocorre quando dois números de sinais iguais produzem um resultado de sinal oposto
-        status_flags[3] = (a[7] == b[7]) && (result[7] != a[7]);
+        // Overflow flag (V): se o resultado não é representável nos 8 bits (mesmo sinal esperado)
+        status_flags[3] = (product[15:8] != 8'b00000000);
     end
 endmodule
+
 
 
 module DIV(
@@ -314,20 +311,21 @@ module ULA (
     input [7:0] operand1,
     input [7:0] operand2,
     output reg [7:0] result,
-    output reg [7:0] flags
+    output reg [3:0] flags
 );
 
+    // Resultados intermediários
     wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
     wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
     wire [3:0] add_flags, sub_flags, mul_flags;
-    
+
     // Instância dos módulos matemáticos
     ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
     SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
     MUL mul(.a(operand1), .b(operand2), .result(mul_result), .status_flags(mul_flags));
     DIV div(.a(operand1), .b(operand2), .result(div_result));
     MOD mod(.a(operand1), .b(operand2), .result(mod_result));
-    
+
     // Instância dos módulos lógicos
     AND and_gate(.a(operand1), .b(operand2), .result(and_result));
     OR or_gate(.a(operand1), .b(operand2), .result(or_result));
@@ -338,104 +336,99 @@ module ULA (
     XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
 
     always @(*) begin
-    // Decodifica a operação
-    case (ula_operation)
-        4'b0001: begin
-            result = add_result;    // ADD
-            flags = add_flags;      // Atualiza as flags para ADD
-        end
-        4'b0010: begin
-            result = sub_result;    // SUB
-            flags = sub_flags;      // Atualiza as flags para SUB
-        end
-        4'b0011: begin
-            result = mul_result;    // MUL
-            flags = mul_flags;      // Atualiza as flags para MUL
-        end
-        4'b0100: begin 
-            result = div_result;
-            if (operand2 == 8'b0) begin  // Corrigir de 'b' para 'operand2'
-                result = 8'b0;  // Resultado 0 por erro de divisão (divisão por zero)
-                flags[0] = 1;   // Zero flag (Z) - resultado é zero
-                flags[1] = 0;   // Sign flag (S) - divisão por zero, não faz sentido aplicar
-                flags[2] = 1;   // Carry flag (C) - erro de divisão por zero
-                flags[3] = 0;   // Overflow flag (V) - não se aplica para divisão
-            end else begin 
-                flags[0] = (result == 8'b00000000);  // Zero flag (Z) - se o resultado é zero
-                flags[1] = result[7];                // Sign flag (S) - se o bit mais significativo é 1
-                flags[2] = 0;                        // Carry flag (C) - não se aplica diretamente
-                flags[3] = 0;                        // Overflow flag (V) - não se aplica diretamente
+        case (ula_operation)
+            4'b0001: begin // ADD
+                result = add_result;
+                flags = add_flags;
             end
-        end
-
-        4'b0101: begin 
-           result = mod_result; // MOD
-          flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
-          flags[1] = mod_result[7]; // Sign flag (S)
-          flags[2] = 0; // Carry flag (não se aplica para MOD)
-          flags[3] = 0; // Overflow flag (não se aplica para MOD)
-        end
-
-        4'b0110: begin 
-            result = and_result;  // AND
-            flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = and_result[7]; // Sign flag (S)
-            flags[2] = 0; //carry(não se aplica)
-            flags[3] = 0; //overflow (não se aplica)
-        end
-            4'b0111: begin 
-            result = or_result;   // OR
-            flags[0] = (or_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = or_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        4'b1000: begin 
-            result = xor_result;  // XOR
-            flags[0] = (xor_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = xor_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        4'b1001: begin 
-            result = not_result;  // NOT
-            flags[0] = (not_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = not_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        4'b1010: begin 
-            result = nor_result;  // NOR
-            flags[0] = (nor_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = nor_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        4'b1011: begin 
-            result = nand_result; // NAND
-            flags[0] = (nand_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = nand_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        4'b1100: begin 
-            result = xnor_result; // XNOR
-            flags[0] = (xnor_result == 8'b00000000); // Zero flag (Z)
-            flags[1] = xnor_result[7]; // Sign flag (S)
-            flags[2] = 0; // carry (não se aplica)
-            flags[3] = 0; // overflow (não se aplica)
-        end
-
-        default: result = 8'b0;        // Operação inválida
+            4'b0010: begin // SUB
+                result = sub_result;
+                flags = sub_flags;
+            end
+            4'b0011: begin // MUL
+                result = mul_result;
+                flags = mul_flags;
+            end
+            4'b0100: begin // DIV
+                result = div_result;
+                if (operand2 == 8'b0) begin
+                    result = 8'b0; // Resultado 0 por erro de divisão (divisão por zero)
+                    flags[0] = 1;  // Zero flag (Z)
+                    flags[1] = 0;  // Sign flag (S)
+                    flags[2] = 1;  // Carry flag (C) - erro de divisão
+                    flags[3] = 0;  // Overflow flag (V)
+                end else begin
+                    flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                    flags[1] = result[7];              // Sign flag (S)
+                    flags[2] = 0;                      // Carry flag (não se aplica)
+                    flags[3] = 0;                      // Overflow flag (não se aplica)
+                end
+            end
+            4'b0101: begin // MOD
+                result = mod_result;
+                flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = mod_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b0110: begin // AND
+                result = and_result;
+                flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = and_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b0111: begin // OR
+                result = or_result;
+                flags[0] = (or_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = or_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1000: begin // XOR
+                result = xor_result;
+                flags[0] = (xor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = xor_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1001: begin // NOT
+                result = not_result;
+                flags[0] = (not_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = not_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1010: begin // NOR
+                result = nor_result;
+                flags[0] = (nor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = nor_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1011: begin // NAND
+                result = nand_result;
+                flags[0] = (nand_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = nand_result[7];              // Sign flag (S)
+                flags[2] = 0;                           // Carry flag (não se aplica)
+                flags[3] = 0;                           // Overflow flag (não se aplica)
+            end
+            4'b1100: begin // XNOR
+                result = xnor_result;
+                flags[0] = (xnor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = xnor_result[7];              // Sign flag (S)
+                flags[2] = 0;                           // Carry flag (não se aplica)
+                flags[3] = 0;                           // Overflow flag (não se aplica)
+            end
+            default: begin // Operação inválida
+                result = 8'b0;
+                flags = 4'b0000;
+            end
         endcase
     end
 
 endmodule
+
 
 module Register (
     input clk,
@@ -477,71 +470,132 @@ module Controller (
     end
 endmodule
 
-module Processador (
-    input clk,
-    input reset,
-    input [7:0] opcode,         // Código da operação
-    input [7:0] operand1,       // Operando 1
-    input [7:0] operand2,       // Operando 2
-    output [7:0] result,        // Resultado da operação
-    output [7:0] flags          // Flags (Zero, Carry, etc.)
+module Processor (
+    input clk,                // Clock
+    input reset,              // Reset global
+    input [7:0] opcode,       // Código da operação
+    input [7:0] operand1,     // Primeiro operando
+    input [7:0] operand2,     // Segundo operando
+    input done,               // Indica que todas as instruções foram processadas
+    output reg [7:0] result,  // Resultado da operação
+    output reg [7:0] flags    // Flags de status
 );
 
-    // Conexões internas
-    wire [7:0] ula_result;
-    wire [7:0] regA_out, regB_out, regC_out;
-    wire [7:0] ula_flags;
-    wire [3:0] ula_operation;
-    // Instância dos registradores
-    Register regA(.clk(clk), .reset(reset), .data_in(operand1), .data_out(regA_out));
-    Register regB(.clk(clk), .reset(reset), .data_in(operand2), .data_out(regB_out));
-    Register regC(.clk(clk), .reset(reset), .data_in(ula_result), .data_out(regC_out));
+    // Sinais internos
+    wire [3:0] ula_operation;  // Operação decodificada pelo Controller
+    wire [7:0] ula_result;     // Resultado da ULA
+    wire [7:0] ula_flags;      // Flags geradas pela ULA
+
+    reg [1:0] cycle_counter;   // Contador de ciclos (2 bits para contar até 3)
 
     // Instância do Controller
-    Controller controller(
+    Controller controller (
         .opcode(opcode),
         .ula_operation(ula_operation)
     );
 
     // Instância da ULA
-    ULA ula(
+    ULA ula (
         .ula_operation(ula_operation),
-        .operand1(regA_out),
-        .operand2(regB_out),
+        .operand1(operand1),
+        .operand2(operand2),
         .result(ula_result),
         .flags(ula_flags)
     );
 
-    // Flags e resultados saem da ULA
-    assign result = regC_out;
-    assign flags = ula_flags;
+    // Processamento síncrono
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            // Resetar os sinais de saída e o contador de ciclos
+            result <= 8'b0;
+            flags <= 8'b0;
+            cycle_counter <= 0;
+        end else if (opcode === 8'bx) begin
+            // Finalizar a simulação se o opcode for indefinido
+            $display("All operations processed. Ending simulation.");
+            $finish;
+        end else begin
+            // Incrementar o contador de ciclos
+            if (cycle_counter < 3) begin
+                cycle_counter <= cycle_counter + 1;
+            end else begin
+                // Atualizar resultado e flags após 3 ciclos
+                result <= ula_result;
+                flags <= ula_flags;
+
+                // Mostrar o resultado no console
+                $display("Time=%0dns | Opcode=%b | Operand1=%b | Operand2=%b | Result=%b | Flags=%b",
+                         $time, opcode, operand1, operand2, ula_result, ula_flags);
+
+                // Resetar o contador após exibir o resultado
+                cycle_counter <= 0;
+            end
+        end
+    end
 
 endmodule
 
 module InstructionLoader (
+    input clk,                     // Clock para controle de execução
+    input reset,                   // Reset do contador
     output reg [7:0] opcode,       // Opcode da instrução
     output reg [7:0] operand1,     // Primeiro operando
     output reg [7:0] operand2,     // Segundo operando
-    input clk,                     // Clock para controle de execução
-    input reset                    // Reset do contador
+    output reg done                // Sinaliza quando todas as instruções foram processadas
 );
-  reg [7:0] memory [0:2];      // Memória para carregar as instruções
+
+  	reg [7:0] memory [0:255];      // Memória para armazenar as instruções (256 bytes)
     reg [7:0] pc;                  // Contador de programa (PC)
+    reg [2:0] state;               // Estado da máquina de estados interna
+
+    localparam LOAD_OPCODE  = 3'b000;
+    localparam LOAD_OPERAND1 = 3'b001;
+    localparam LOAD_OPERAND2 = 3'b010;
+    localparam WAIT           = 3'b011;
+    localparam DONE           = 3'b100;
 
     initial begin
-        // Carrega o arquivo binário na memória
         $readmemb("instructions.bin", memory);
     end
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            pc <= 0;               // Reinicia o contador de programa
+            pc <= 0;
+            opcode <= 0;
+            operand1 <= 0;
+            operand2 <= 0;
+            state <= LOAD_OPCODE;
+            done <= 0;
         end else begin
-            // Decodifica a instrução atual
-            opcode <= memory[pc];
-            operand1 <= memory[pc + 1];
-            operand2 <= memory[pc + 2];
-            pc <= pc + 3;          // Avança para a próxima instrução
+            case (state)
+                LOAD_OPCODE: begin
+                    if (pc < 256) begin
+                        opcode <= memory[pc]; // Lê o opcode
+                        pc <= pc + 1;
+                        state <= LOAD_OPERAND1;
+                    end else begin
+                        state <= DONE; // Finaliza se todas as instruções foram processadas
+                    end
+                end
+                LOAD_OPERAND1: begin
+                    operand1 <= memory[pc]; // Lê o primeiro operando
+                    pc <= pc + 1;
+                    state <= LOAD_OPERAND2;
+                end
+                LOAD_OPERAND2: begin
+                    operand2 <= memory[pc]; // Lê o segundo operando
+                    pc <= pc + 1;
+                    state <= WAIT;
+                end
+                WAIT: begin
+                    // Aguarda 1 ciclo antes de carregar a próxima instrução
+                    state <= LOAD_OPCODE;
+                end
+                DONE: begin
+                    done <= 1; // Indica que todas as instruções foram lidas
+                end
+            endcase
         end
     end
+
 endmodule
