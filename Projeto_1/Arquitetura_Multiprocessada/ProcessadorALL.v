@@ -334,7 +334,7 @@ module ULA (
     NOR nor_gate(.a(operand1), .b(operand2), .result(nor_result));
     NAND nand_gate(.a(operand1), .b(operand2), .result(nand_result));
     XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
-
+    
     always @(*) begin
         case (ula_operation)
             4'b0001: begin // ADD
