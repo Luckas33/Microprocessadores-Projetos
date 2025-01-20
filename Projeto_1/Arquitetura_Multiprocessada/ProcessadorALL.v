@@ -1,5 +1,504 @@
 `timescale 1ns / 1ps
 
+module Processor (
+    input clk,                   // Clock
+    input reset,                 // Reset global
+    input [7:0] opcode,          // Opcode
+    input [7:0] operand1,        // Primeiro operando
+    input [7:0] operand2,        // Segundo operando
+    output reg [7:0] result,     // Resultado
+    output reg [3:0] flags,      // Flags de status
+    output reg ula_ready         // Sinal de "pronto" do processador
+);
+
+    wire [3:0] ula_operation;    // Operação decodificada pela ULA
+    wire [7:0] ula_result;       // Resultado da ULA
+    wire [3:0] ula_flags;        // Flags gerados pela ULA
+    wire ula_ready_internal;     // Sinal de "pronto" da ULA
+
+    // Registradores internos para armazenar operandos
+    reg [7:0] reg_operand1;
+    reg [7:0] reg_operand2;
+
+    // Registradores para sincronizar o tempo de exibição
+    reg [2:0] cycle_counter;      // Contador de ciclos de clock
+    reg operation_started;        // Flag para verificar se a primeira operação foi concluída
+    reg mov_active;               // Flag para controlar a operação de MOV
+    reg mov_display_ready;        // Flag para indicar quando o display pode ser acionado
+    reg [7:0] mov_result_buffer;  // Buffer temporário para o valor do resultado de MOV
+
+    // Instância do controlador
+    Controller controller (
+        .opcode(opcode),
+        .ula_operation(ula_operation)
+    );
+
+    // Instância da ULA
+    ULA ula (
+        .clk(clk),
+        .reset(reset),
+        .ula_operation(ula_operation),
+        .operand1(reg_operand1),
+        .operand2(reg_operand2),
+        .result(ula_result),
+        .flags(ula_flags),
+        .ula_ready(ula_ready_internal) // Sinal pronto da ULA
+    );
+
+    // Processamento síncrono
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            // Resetar sinais e registradores
+            result <= 8'b0;
+            flags <= 4'b0;
+            ula_ready <= 1'b0;
+            reg_operand1 <= 8'b0;
+            reg_operand2 <= 8'b0;
+            cycle_counter <= 3'b0; // Reseta o contador de ciclos
+            operation_started <= 1'b0; // Reseta a flag de início de operação
+            mov_active <= 1'b0;    // Reseta a flag de MOV
+            mov_display_ready <= 1'b0; // Reseta a flag de exibição do MOV
+            mov_result_buffer <= 8'b0; // Reseta o buffer de resultado do MOV
+        end else begin
+            if (opcode == 8'b00001101) begin // Operação MOV
+                if (!mov_active) begin
+                    // Primeiro ciclo: copia o valor do operand1 para o buffer de resultado
+                    mov_result_buffer <= operand1;
+                    flags <= 4'b0000; // Flags podem ser ajustadas conforme necessário
+                    ula_ready <= 1'b1;
+                    mov_active <= 1'b1; // Ativa a operação de MOV
+                    mov_display_ready <= 1'b0; // Prepara para exibir no próximo ciclo
+                  	
+                end else if (!mov_display_ready) begin
+                    // Segundo ciclo: prepara para exibir o valor
+                    result <= mov_result_buffer; // Atualiza o resultado
+                    mov_display_ready <= 1'b1;
+                  	$display(
+                        "Time=%0dns | Opcode=MOV | Source=operand1 | Destination=result | Flags=%b",
+                        $time, flags
+                    );
+                end else if (mov_display_ready) begin
+                    // Exibe o resultado no segundo ciclo apenas
+                    $display(
+                        "Time=%0dns | Opcode=MOV | Source=%b | Destination=%b | Flags=%b",
+                        $time, mov_result_buffer, result, flags
+                    );
+                    mov_active <= 1'b0; // Finaliza a operação de MOV
+                    mov_display_ready <= 1'b0;
+                end
+            end else if (ula_ready_internal) begin
+                if (!operation_started) begin
+                    // Primeira operação concluída
+                    operation_started <= 1'b1;
+                    result <= ula_result;
+                    flags <= ula_flags;
+                    ula_ready <= 1'b1;
+
+                    // Exibição imediata da primeira operação
+                    $display(
+                        "Time=%0dns | Opcode=%b | Operand1=%b | Operand2=%b | ULA Operation=%b | Result=%b | Flags=%b",
+                        $time, opcode, reg_operand1, reg_operand2, ula_operation, ula_result, ula_flags
+                    );
+                end else if (cycle_counter < 3) begin
+                    // Incrementa o contador de ciclos após a primeira operação
+                    cycle_counter <= cycle_counter + 1;
+                    ula_ready <= 1'b0;
+                end else begin
+                    // Atualiza os resultados após 4 ciclos de clock
+                    result <= ula_result;
+                    flags <= ula_flags;
+                    ula_ready <= 1'b1;
+
+                    // Exibição após 4 ciclos
+                    $display(
+                        "Time=%0dns | Opcode=%b | Operand1=%b | Operand2=%b | ULA Operation=%b | Result=%b | Flags=%b",
+                        $time, opcode, reg_operand1, reg_operand2, ula_operation, ula_result, ula_flags
+                    );
+
+                    // Reseta o contador para a próxima operação
+                    cycle_counter <= 3'b0;
+                end
+            end else begin
+                ula_ready <= 1'b0; // Enquanto a ULA não estiver pronta
+                cycle_counter <= 3'b0; // Reseta o contador caso a ULA reinicie
+            end
+
+            // Armazena os operandos para manter consistência com a operação em andamento
+            reg_operand1 <= operand1;
+            reg_operand2 <= operand2;
+        end
+    end
+
+endmodule
+
+module Register (
+    input clk,
+    input reset,
+    input [7:0] data_in,
+    output reg [7:0] data_out
+);
+
+    always @(posedge clk or posedge reset) begin
+        if (reset)
+            data_out <= 8'b0;
+        else
+            data_out <= data_in;
+    end
+
+endmodule
+
+module Controller (
+    input [7:0] opcode,
+    output reg [3:0] ula_operation
+);
+    // Decodificador de instruções
+    always @(*) begin
+        case (opcode)
+            8'b00000001: ula_operation = 4'b0001; // ADD
+            8'b00000010: ula_operation = 4'b0010; // SUB
+            8'b00000011: ula_operation = 4'b0011; // MUL
+            8'b00000100: ula_operation = 4'b0100; // DIV
+            8'b00000101: ula_operation = 4'b0101; // MOD
+            8'b00000110: ula_operation = 4'b0110; // AND
+            8'b00000111: ula_operation = 4'b0111; // OR
+            8'b00001000: ula_operation = 4'b1000; // XOR
+            8'b00001001: ula_operation = 4'b1001; // NOT
+            8'b00001010: ula_operation = 4'b1010; // NOR
+            8'b00001011: ula_operation = 4'b1011; // NAND
+            8'b00001100: ula_operation = 4'b1100; // XNOR
+          	8'b00001110: ula_operation = 4'b1110; // SLL
+            8'b00001111: ula_operation = 4'b1111; // SRL
+            default: ula_operation = 4'b0000; // Operação inválida
+        endcase
+    end
+endmodule
+
+module ULA (
+    input clk,
+    input reset,
+    input [3:0] ula_operation,
+    input [7:0] operand1,
+    input [7:0] operand2,
+    output reg [7:0] result,
+    output reg [3:0] flags,
+    output reg ula_ready // Sinal indicando que a operação foi concluída
+);
+
+    // Resultados intermediários
+    wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
+    wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
+    wire [3:0] add_flags, sub_flags, mul_flags;
+  	wire [7:0] shift_result;
+	wire carry;
+
+    // Instância dos módulos matemáticos
+    ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
+    SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
+    MUL mul(.a(operand1), .b(operand2), .result(mul_result), .status_flags(mul_flags));
+    DIV div(.a(operand1), .b(operand2), .result(div_result));
+    MOD mod(.a(operand1), .b(operand2), .result(mod_result));
+
+    // Instância dos módulos lógicos
+    AND and_gate(.a(operand1), .b(operand2), .result(and_result));
+    OR or_gate(.a(operand1), .b(operand2), .result(or_result));
+    XOR xor_gate(.a(operand1), .b(operand2), .result(xor_result));
+    NOT not_gate(.a(operand1), .result(not_result));
+    NOR nor_gate(.a(operand1), .b(operand2), .result(nor_result));
+    NAND nand_gate(.a(operand1), .b(operand2), .result(nand_result));
+    XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
+  
+  	BitManipulation u_bit_manipulation (
+    .data_in(operand1),                             // Entrada de dados (operand1)
+    .enable_shift((ula_operation == 4'b1111 || ula_operation == 4'b1110)), // Habilita o deslocamento
+    .direction_shift(ula_operation[0]),             // Direção do deslocamento: 0 para esquerda, 1 para direita
+    .enable_rotate(1'b0),                           // Rotação desativada
+    .direction_rotate(1'b0),                        // Não se aplica
+    .data_out(shift_result),                        // Saída após deslocamento ou rotação
+    .carry(carry)                                   // Sinal de carry (indicando o bit deslocado)
+    );
+
+    reg [2:0] cycle_counter; // Contador de ciclos
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            cycle_counter <= 3'b0;
+            ula_ready <= 1'b0;
+        end else begin
+            if (cycle_counter < 3) begin
+                cycle_counter <= cycle_counter + 1;
+                ula_ready <= 1'b0;
+            end else begin
+                ula_ready <= 1'b1;
+            end
+        end
+    end
+
+    always @(*) begin
+        case (ula_operation)
+            4'b0001: begin // ADD
+                result = add_result;
+                flags = add_flags;
+            end
+            4'b0010: begin // SUB
+                result = sub_result;
+                flags = sub_flags;
+            end
+            4'b0011: begin // MUL
+                result = mul_result;
+                flags = mul_flags;
+            end
+            4'b0100: begin // DIV
+                result = div_result;
+                if (operand2 == 8'b0) begin
+                    flags = 4'b1001; // Divisão por zero: Zero flag (Z) e Overflow flag (V)
+                end else begin
+                    flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                    flags[1] = result[7];              // Sign flag (S)
+                    flags[2] = 0;                      // Carry flag (não se aplica)
+                    flags[3] = 0;                      // Overflow flag (não se aplica)
+                end
+            end
+            4'b0101: begin // MOD
+                result = mod_result;
+                flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = mod_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b0110: begin // AND
+                result = and_result;
+                flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = and_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b0111: begin // OR
+                result = or_result;
+                flags[0] = (or_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = or_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1000: begin // XOR
+                result = xor_result;
+                flags[0] = (xor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = xor_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1001: begin // NOT
+                result = not_result;
+                flags[0] = (not_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = not_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1010: begin // NOR
+                result = nor_result;
+                flags[0] = (nor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = nor_result[7];              // Sign flag (S)
+                flags[2] = 0;                          // Carry flag (não se aplica)
+                flags[3] = 0;                          // Overflow flag (não se aplica)
+            end
+            4'b1011: begin // NAND
+                result = nand_result;
+                flags[0] = (nand_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = nand_result[7];              // Sign flag (S)
+                flags[2] = 0;                           // Carry flag (não se aplica)
+                flags[3] = 0;                           // Overflow flag (não se aplica)
+            end
+            4'b1100: begin // XNOR
+                result = xnor_result;
+                flags[0] = (xnor_result == 8'b00000000); // Zero flag (Z)
+                flags[1] = xnor_result[7];              // Sign flag (S)
+                flags[2] = 0;                           // Carry flag (não se aplica)
+                flags[3] = 0;                           // Overflow flag (não se aplica)
+            end
+          	4'b1110: begin // DESLOCAMENTO PRA ESQUERDA
+                flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                flags[1] = result[7];              // Sign flag (S)
+                flags[2] = carry;                  // Carry flag
+                flags[3] = 0;                      // Overflow flag (não se aplica)
+                result = shift_result;
+            end
+            4'b1111: begin // DESLOCAMENTO PRA DIREITA
+                flags[0] = (result == 8'b00000000); // Zero flag (Z)
+                flags[1] = result[7];              // Sign flag (S)
+                flags[2] = carry;                  // Carry flag
+                flags[3] = 0;                      // Overflow flag (não se aplica)
+            	result = shift_result;
+            end
+            default: begin // Operação inválida
+                result = 8'b0;
+                flags = 4'b0000;
+            end
+        endcase
+    end
+
+endmodule
+
+
+
+module InstructionMemory ( // memória externa
+    input clk,                  // Clock
+    input [7:0] address,        // Endereço da instrução
+    input write_enable,         // Habilita escrita
+    input [23:0] data_in,       // Dados de entrada (instrução completa)
+    output reg [23:0] data_out  // Dados de saída (instrução completa)
+);
+
+    reg [23:0] memory [0:255];  // Memória de 256 instruções de 24 bits
+
+    always @(posedge clk) begin
+        if (write_enable) begin
+            memory[address] <= data_in; // Escreve na memória
+        end
+        data_out <= memory[address];   // Lê da memória
+    end
+endmodule
+
+module InstructionLoader ( // lê arquivo binário
+    input clk,                     // Clock
+    input reset,                   // Reset
+    output reg [7:0] opcode,       // Opcode da instrução
+    output reg [7:0] operand1,     // Primeiro operando
+    output reg [7:0] operand2,     // Segundo operando
+    output reg done,               // Indica que todas as instruções foram processadas
+    output reg write_enable,       // Habilita escrita na memória
+    output reg [7:0] address,      // Endereço para a memória
+    output reg [23:0] data_out     // Dados para a memória
+);
+
+    reg [7:0] memory [0:255];      // Memória interna para carregar o arquivo
+    reg [7:0] pc;                  // Contador de programa (PC)
+    reg [2:0] state;               // Máquina de estados
+
+    localparam LOAD_OPCODE   = 3'b000;
+    localparam LOAD_OPERAND1 = 3'b001;
+    localparam LOAD_OPERAND2 = 3'b010;
+    localparam STORE         = 3'b011;
+    localparam DONE          = 3'b100;
+
+    initial begin
+        $readmemb("instructions.bin", memory); // Carrega instruções de arquivo
+    end
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            pc <= 0;
+            opcode <= 0;
+            operand1 <= 0;
+            operand2 <= 0;
+            write_enable <= 0;
+            address <= 0;
+            data_out <= 0;
+            state <= LOAD_OPCODE;
+            done <= 0;
+        end else begin
+            case (state)
+                LOAD_OPCODE: begin
+                    if (pc < 256) begin
+                        opcode <= memory[pc];
+                        pc <= pc + 1;
+                        state <= LOAD_OPERAND1;
+                    end else begin
+                        state <= DONE;
+                    end
+                end
+                LOAD_OPERAND1: begin
+                    operand1 <= memory[pc];
+                    pc <= pc + 1;
+                    state <= LOAD_OPERAND2;
+                end
+                LOAD_OPERAND2: begin
+                    operand2 <= memory[pc];
+                    pc <= pc + 1;
+                    state <= STORE;
+                end
+                STORE: begin
+                    write_enable <= 1;
+                    address <= pc / 3;
+                    data_out <= {opcode, operand1, operand2};
+                    state <= LOAD_OPCODE;
+                end
+                DONE: begin
+                    done <= 1;
+                end
+            endcase
+        end
+    end
+endmodule
+
+module TopLevel ( // faz a integração do instruction loader, memória externa e processador
+    input clk,
+    input reset,
+    output [7:0] result,
+    output [3:0] flags,
+    output reg done // Sinal indicando que a execução foi encerrada
+);
+
+    wire [7:0] opcode, operand1, operand2;
+    wire [23:0] instruction;
+    wire write_enable;
+    wire [7:0] address;
+    wire [23:0] data_out;
+
+    reg stop_execution; // Controle interno para interromper o processamento
+
+    // Memória de instruções
+    InstructionMemory instr_mem (
+        .clk(clk),
+        .address(address),
+        .write_enable(write_enable),
+        .data_in(data_out),
+        .data_out(instruction)
+    );
+
+    // Carregador de instruções
+    InstructionLoader instr_loader (
+        .clk(clk),
+        .reset(reset),
+        .opcode(opcode),
+        .operand1(operand1),
+        .operand2(operand2),
+        .done(),
+        .write_enable(write_enable),
+        .address(address),
+        .data_out(data_out)
+    );
+
+    // Processador
+    Processor processor (
+        .clk(clk),
+        .reset(reset),
+        .opcode(opcode),
+        .operand1(operand1),
+        .operand2(operand2),
+        .result(result),
+        .flags(flags)
+    );
+
+    // Controle de término
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            done <= 1'b0;
+            stop_execution <= 1'b0;
+        end else begin
+         
+            if (opcode === 8'bxxxxxxxx) begin
+                stop_execution <= 1'b1;
+                done <= 1'b1; 
+              	$finish;
+            end
+        end
+    end
+
+    // Controla o sinal de write_enable para evitar operações após o término
+    assign write_enable = ~stop_execution;
+
+endmodule
+
+
 module ADD (
     input [7:0] a,
     input [7:0] b,
@@ -315,501 +814,4 @@ module BitManipulation ( //Realiza as operações de deslocamento de bit a direi
     end
 endmodule
 
-module ULA (
-    input clk,
-    input reset,
-    input [3:0] ula_operation,
-    input [7:0] operand1,
-    input [7:0] operand2,
-    output reg [7:0] result,
-    output reg [3:0] flags,
-    output reg ula_ready // Sinal indicando que a operação foi concluída
-);
 
-    // Resultados intermediários
-    wire [7:0] add_result, sub_result, mul_result, div_result, mod_result;
-    wire [7:0] and_result, or_result, xor_result, not_result, nor_result, nand_result, xnor_result;
-    wire [3:0] add_flags, sub_flags, mul_flags;
-  	wire [7:0] shift_result;
-	wire carry;
-
-    // Instância dos módulos matemáticos
-    ADD add(.a(operand1), .b(operand2), .result(add_result), .status_flags(add_flags));
-    SUB sub(.a(operand1), .b(operand2), .result(sub_result), .status_flags(sub_flags));
-    MUL mul(.a(operand1), .b(operand2), .result(mul_result), .status_flags(mul_flags));
-    DIV div(.a(operand1), .b(operand2), .result(div_result));
-    MOD mod(.a(operand1), .b(operand2), .result(mod_result));
-
-    // Instância dos módulos lógicos
-    AND and_gate(.a(operand1), .b(operand2), .result(and_result));
-    OR or_gate(.a(operand1), .b(operand2), .result(or_result));
-    XOR xor_gate(.a(operand1), .b(operand2), .result(xor_result));
-    NOT not_gate(.a(operand1), .result(not_result));
-    NOR nor_gate(.a(operand1), .b(operand2), .result(nor_result));
-    NAND nand_gate(.a(operand1), .b(operand2), .result(nand_result));
-    XNOR xnor_gate(.a(operand1), .b(operand2), .result(xnor_result));
-  
-  	BitManipulation u_bit_manipulation (
-    .data_in(operand1),                             // Entrada de dados (operand1)
-    .enable_shift((ula_operation == 4'b1111 || ula_operation == 4'b1110)), // Habilita o deslocamento
-    .direction_shift(ula_operation[0]),             // Direção do deslocamento: 0 para esquerda, 1 para direita
-    .enable_rotate(1'b0),                           // Rotação desativada
-    .direction_rotate(1'b0),                        // Não se aplica
-    .data_out(shift_result),                        // Saída após deslocamento ou rotação
-    .carry(carry)                                   // Sinal de carry (indicando o bit deslocado)
-    );
-
-    reg [2:0] cycle_counter; // Contador de ciclos
-
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            cycle_counter <= 3'b0;
-            ula_ready <= 1'b0;
-        end else begin
-            if (cycle_counter < 3) begin
-                cycle_counter <= cycle_counter + 1;
-                ula_ready <= 1'b0;
-            end else begin
-                ula_ready <= 1'b1;
-            end
-        end
-    end
-
-    always @(*) begin
-        case (ula_operation)
-            4'b0001: begin // ADD
-                result = add_result;
-                flags = add_flags;
-            end
-            4'b0010: begin // SUB
-                result = sub_result;
-                flags = sub_flags;
-            end
-            4'b0011: begin // MUL
-                result = mul_result;
-                flags = mul_flags;
-            end
-            4'b0100: begin // DIV
-                result = div_result;
-                if (operand2 == 8'b0) begin
-                    flags = 4'b1001; // Divisão por zero: Zero flag (Z) e Overflow flag (V)
-                end else begin
-                    flags[0] = (result == 8'b00000000); // Zero flag (Z)
-                    flags[1] = result[7];              // Sign flag (S)
-                    flags[2] = 0;                      // Carry flag (não se aplica)
-                    flags[3] = 0;                      // Overflow flag (não se aplica)
-                end
-            end
-            4'b0101: begin // MOD
-                result = mod_result;
-                flags[0] = (mod_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = mod_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b0110: begin // AND
-                result = and_result;
-                flags[0] = (and_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = and_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b0111: begin // OR
-                result = or_result;
-                flags[0] = (or_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = or_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b1000: begin // XOR
-                result = xor_result;
-                flags[0] = (xor_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = xor_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b1001: begin // NOT
-                result = not_result;
-                flags[0] = (not_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = not_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b1010: begin // NOR
-                result = nor_result;
-                flags[0] = (nor_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = nor_result[7];              // Sign flag (S)
-                flags[2] = 0;                          // Carry flag (não se aplica)
-                flags[3] = 0;                          // Overflow flag (não se aplica)
-            end
-            4'b1011: begin // NAND
-                result = nand_result;
-                flags[0] = (nand_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = nand_result[7];              // Sign flag (S)
-                flags[2] = 0;                           // Carry flag (não se aplica)
-                flags[3] = 0;                           // Overflow flag (não se aplica)
-            end
-            4'b1100: begin // XNOR
-                result = xnor_result;
-                flags[0] = (xnor_result == 8'b00000000); // Zero flag (Z)
-                flags[1] = xnor_result[7];              // Sign flag (S)
-                flags[2] = 0;                           // Carry flag (não se aplica)
-                flags[3] = 0;                           // Overflow flag (não se aplica)
-            end
-          	4'b1110: begin // DESLOCAMENTO PRA ESQUERDA
-                flags[0] = (result == 8'b00000000); // Zero flag (Z)
-                flags[1] = result[7];              // Sign flag (S)
-                flags[2] = carry;                  // Carry flag
-                flags[3] = 0;                      // Overflow flag (não se aplica)
-                result = shift_result;
-            end
-            4'b1111: begin // DESLOCAMENTO PRA DIREITA
-                flags[0] = (result == 8'b00000000); // Zero flag (Z)
-                flags[1] = result[7];              // Sign flag (S)
-                flags[2] = carry;                  // Carry flag
-                flags[3] = 0;                      // Overflow flag (não se aplica)
-            	result = shift_result;
-            end
-            default: begin // Operação inválida
-                result = 8'b0;
-                flags = 4'b0000;
-            end
-        endcase
-    end
-
-endmodule
-
-
-module Register (
-    input clk,
-    input reset,
-    input [7:0] data_in,
-    output reg [7:0] data_out
-);
-
-    always @(posedge clk or posedge reset) begin
-        if (reset)
-            data_out <= 8'b0;
-        else
-            data_out <= data_in;
-    end
-
-endmodule
-
-module Controller (
-    input [7:0] opcode,
-    output reg [3:0] ula_operation
-);
-    // Decodificador de instruções
-    always @(*) begin
-        case (opcode)
-            8'b00000001: ula_operation = 4'b0001; // ADD
-            8'b00000010: ula_operation = 4'b0010; // SUB
-            8'b00000011: ula_operation = 4'b0011; // MUL
-            8'b00000100: ula_operation = 4'b0100; // DIV
-            8'b00000101: ula_operation = 4'b0101; // MOD
-            8'b00000110: ula_operation = 4'b0110; // AND
-            8'b00000111: ula_operation = 4'b0111; // OR
-            8'b00001000: ula_operation = 4'b1000; // XOR
-            8'b00001001: ula_operation = 4'b1001; // NOT
-            8'b00001010: ula_operation = 4'b1010; // NOR
-            8'b00001011: ula_operation = 4'b1011; // NAND
-            8'b00001100: ula_operation = 4'b1100; // XNOR
-          	8'b00001110: ula_operation = 4'b1110; // SLL
-            8'b00001111: ula_operation = 4'b1111; // SRL
-            default: ula_operation = 4'b0000; // Operação inválida
-        endcase
-    end
-endmodule
-
-module Processor (
-    input clk,                   // Clock
-    input reset,                 // Reset global
-    input [7:0] opcode,          // Opcode
-    input [7:0] operand1,        // Primeiro operando
-    input [7:0] operand2,        // Segundo operando
-    output reg [7:0] result,     // Resultado
-    output reg [3:0] flags,      // Flags de status
-    output reg ula_ready         // Sinal de "pronto" do processador
-);
-
-    wire [3:0] ula_operation;    // Operação decodificada pela ULA
-    wire [7:0] ula_result;       // Resultado da ULA
-    wire [3:0] ula_flags;        // Flags gerados pela ULA
-    wire ula_ready_internal;     // Sinal de "pronto" da ULA
-
-    // Registradores internos para armazenar operandos
-    reg [7:0] reg_operand1;
-    reg [7:0] reg_operand2;
-
-    // Registradores para sincronizar o tempo de exibição
-    reg [2:0] cycle_counter;      // Contador de ciclos de clock
-    reg operation_started;        // Flag para verificar se a primeira operação foi concluída
-    reg mov_active;               // Flag para controlar a operação de MOV
-    reg mov_display_ready;        // Flag para indicar quando o display pode ser acionado
-    reg [7:0] mov_result_buffer;  // Buffer temporário para o valor do resultado de MOV
-
-    // Instância do controlador
-    Controller controller (
-        .opcode(opcode),
-        .ula_operation(ula_operation)
-    );
-
-    // Instância da ULA
-    ULA ula (
-        .clk(clk),
-        .reset(reset),
-        .ula_operation(ula_operation),
-        .operand1(reg_operand1),
-        .operand2(reg_operand2),
-        .result(ula_result),
-        .flags(ula_flags),
-        .ula_ready(ula_ready_internal) // Sinal pronto da ULA
-    );
-
-    // Processamento síncrono
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            // Resetar sinais e registradores
-            result <= 8'b0;
-            flags <= 4'b0;
-            ula_ready <= 1'b0;
-            reg_operand1 <= 8'b0;
-            reg_operand2 <= 8'b0;
-            cycle_counter <= 3'b0; // Reseta o contador de ciclos
-            operation_started <= 1'b0; // Reseta a flag de início de operação
-            mov_active <= 1'b0;    // Reseta a flag de MOV
-            mov_display_ready <= 1'b0; // Reseta a flag de exibição do MOV
-            mov_result_buffer <= 8'b0; // Reseta o buffer de resultado do MOV
-        end else begin
-            if (opcode == 8'b00001101) begin // Operação MOV
-                if (!mov_active) begin
-                    // Primeiro ciclo: copia o valor do operand1 para o buffer de resultado
-                    mov_result_buffer <= operand1;
-                    flags <= 4'b0000; // Flags podem ser ajustadas conforme necessário
-                    ula_ready <= 1'b1;
-                    mov_active <= 1'b1; // Ativa a operação de MOV
-                    mov_display_ready <= 1'b0; // Prepara para exibir no próximo ciclo
-                  	
-                end else if (!mov_display_ready) begin
-                    // Segundo ciclo: prepara para exibir o valor
-                    result <= mov_result_buffer; // Atualiza o resultado
-                    mov_display_ready <= 1'b1;
-                  	$display(
-                        "Time=%0dns | Opcode=MOV | Source=operand1 | Destination=result | Flags=%b",
-                        $time, flags
-                    );
-                end else if (mov_display_ready) begin
-                    // Exibe o resultado no segundo ciclo apenas
-                    $display(
-                        "Time=%0dns | Opcode=MOV | Source=%b | Destination=%b | Flags=%b",
-                        $time, mov_result_buffer, result, flags
-                    );
-                    mov_active <= 1'b0; // Finaliza a operação de MOV
-                    mov_display_ready <= 1'b0;
-                end
-            end else if (ula_ready_internal) begin
-                if (!operation_started) begin
-                    // Primeira operação concluída
-                    operation_started <= 1'b1;
-                    result <= ula_result;
-                    flags <= ula_flags;
-                    ula_ready <= 1'b1;
-
-                    // Exibição imediata da primeira operação
-                    $display(
-                        "Time=%0dns | Opcode=%b | Operand1=%b | Operand2=%b | ULA Operation=%b | Result=%b | Flags=%b",
-                        $time, opcode, reg_operand1, reg_operand2, ula_operation, ula_result, ula_flags
-                    );
-                end else if (cycle_counter < 3) begin
-                    // Incrementa o contador de ciclos após a primeira operação
-                    cycle_counter <= cycle_counter + 1;
-                    ula_ready <= 1'b0;
-                end else begin
-                    // Atualiza os resultados após 4 ciclos de clock
-                    result <= ula_result;
-                    flags <= ula_flags;
-                    ula_ready <= 1'b1;
-
-                    // Exibição após 4 ciclos
-                    $display(
-                        "Time=%0dns | Opcode=%b | Operand1=%b | Operand2=%b | ULA Operation=%b | Result=%b | Flags=%b",
-                        $time, opcode, reg_operand1, reg_operand2, ula_operation, ula_result, ula_flags
-                    );
-
-                    // Reseta o contador para a próxima operação
-                    cycle_counter <= 3'b0;
-                end
-            end else begin
-                ula_ready <= 1'b0; // Enquanto a ULA não estiver pronta
-                cycle_counter <= 3'b0; // Reseta o contador caso a ULA reinicie
-            end
-
-            // Armazena os operandos para manter consistência com a operação em andamento
-            reg_operand1 <= operand1;
-            reg_operand2 <= operand2;
-        end
-    end
-
-endmodule
-
-
-
-module InstructionMemory (
-    input clk,                  // Clock
-    input [7:0] address,        // Endereço da instrução
-    input write_enable,         // Habilita escrita
-    input [23:0] data_in,       // Dados de entrada (instrução completa)
-    output reg [23:0] data_out  // Dados de saída (instrução completa)
-);
-
-    reg [23:0] memory [0:255];  // Memória de 256 instruções de 24 bits
-
-    always @(posedge clk) begin
-        if (write_enable) begin
-            memory[address] <= data_in; // Escreve na memória
-        end
-        data_out <= memory[address];   // Lê da memória
-    end
-endmodule
-
-module InstructionLoader (
-    input clk,                     // Clock
-    input reset,                   // Reset
-    output reg [7:0] opcode,       // Opcode da instrução
-    output reg [7:0] operand1,     // Primeiro operando
-    output reg [7:0] operand2,     // Segundo operando
-    output reg done,               // Indica que todas as instruções foram processadas
-    output reg write_enable,       // Habilita escrita na memória
-    output reg [7:0] address,      // Endereço para a memória
-    output reg [23:0] data_out     // Dados para a memória
-);
-
-    reg [7:0] memory [0:255];      // Memória interna para carregar o arquivo
-    reg [7:0] pc;                  // Contador de programa (PC)
-    reg [2:0] state;               // Máquina de estados
-
-    localparam LOAD_OPCODE   = 3'b000;
-    localparam LOAD_OPERAND1 = 3'b001;
-    localparam LOAD_OPERAND2 = 3'b010;
-    localparam STORE         = 3'b011;
-    localparam DONE          = 3'b100;
-
-    initial begin
-        $readmemb("instructions.bin", memory); // Carrega instruções de arquivo
-    end
-
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            pc <= 0;
-            opcode <= 0;
-            operand1 <= 0;
-            operand2 <= 0;
-            write_enable <= 0;
-            address <= 0;
-            data_out <= 0;
-            state <= LOAD_OPCODE;
-            done <= 0;
-        end else begin
-            case (state)
-                LOAD_OPCODE: begin
-                    if (pc < 256) begin
-                        opcode <= memory[pc];
-                        pc <= pc + 1;
-                        state <= LOAD_OPERAND1;
-                    end else begin
-                        state <= DONE;
-                    end
-                end
-                LOAD_OPERAND1: begin
-                    operand1 <= memory[pc];
-                    pc <= pc + 1;
-                    state <= LOAD_OPERAND2;
-                end
-                LOAD_OPERAND2: begin
-                    operand2 <= memory[pc];
-                    pc <= pc + 1;
-                    state <= STORE;
-                end
-                STORE: begin
-                    write_enable <= 1;
-                    address <= pc / 3;
-                    data_out <= {opcode, operand1, operand2};
-                    state <= LOAD_OPCODE;
-                end
-                DONE: begin
-                    done <= 1;
-                end
-            endcase
-        end
-    end
-endmodule
-
-module TopLevel (
-    input clk,
-    input reset,
-    output [7:0] result,
-    output [3:0] flags,
-    output reg done // Sinal indicando que a execução foi encerrada
-);
-
-    wire [7:0] opcode, operand1, operand2;
-    wire [23:0] instruction;
-    wire write_enable;
-    wire [7:0] address;
-    wire [23:0] data_out;
-
-    reg stop_execution; // Controle interno para interromper o processamento
-
-    // Memória de instruções
-    InstructionMemory instr_mem (
-        .clk(clk),
-        .address(address),
-        .write_enable(write_enable),
-        .data_in(data_out),
-        .data_out(instruction)
-    );
-
-    // Carregador de instruções
-    InstructionLoader instr_loader (
-        .clk(clk),
-        .reset(reset),
-        .opcode(opcode),
-        .operand1(operand1),
-        .operand2(operand2),
-        .done(),
-        .write_enable(write_enable),
-        .address(address),
-        .data_out(data_out)
-    );
-
-    // Processador
-    Processor processor (
-        .clk(clk),
-        .reset(reset),
-        .opcode(opcode),
-        .operand1(operand1),
-        .operand2(operand2),
-        .result(result),
-        .flags(flags)
-    );
-
-    // Controle de término
-    always @(posedge clk or posedge reset) begin
-        if (reset) begin
-            done <= 1'b0;
-            stop_execution <= 1'b0;
-        end else begin
-         
-            if (opcode === 8'bxxxxxxxx) begin
-                stop_execution <= 1'b1;
-                done <= 1'b1; 
-              	$finish;
-            end
-        end
-    end
-
-    // Controla o sinal de write_enable para evitar operações após o término
-    assign write_enable = ~stop_execution;
-
-endmodule
