@@ -28,6 +28,9 @@ map<string, info> mnemonics = {
     { "NOR", info{"00001010", 2} }, //NOR
     { "NAND" , info{"00001011", 2} }, //NAND
     { "XNOR", info{"10001100", 2} },  //XNOR
+    { "NOR", info{"00001101", 2} }, //MOV
+    { "NAND" , info{"00001110", 2} }, //SLL
+    { "XNOR", info{"10001111", 2} },  //SRL
 };
 
 void removeComments(string &s) {
