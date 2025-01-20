@@ -17,6 +17,8 @@ module Controller (
             8'b00001010: ula_operation = 4'b1010; // NOR
             8'b00001011: ula_operation = 4'b1011; // NAND
             8'b00001100: ula_operation = 4'b1100; // XNOR
+          	8'b00001110: ula_operation = 4'b1110; // SLL
+            8'b00001111: ula_operation = 4'b1111; // SRL
             default: ula_operation = 4'b0000; // Operação inválida
         endcase
     end
