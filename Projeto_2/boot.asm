@@ -1,48 +1,74 @@
-BITS 16
-ORG 0x7C00  ; Endereço onde a BIOS carrega o bootloader
+[BITS 16]  ; Estamos no modo real de 16 bits
+[ORG 0x7C00]  ; O BIOS carrega o bootloader neste endereço de memória
 
 start:
-    ; Configurar modo de vídeo texto 80x25
+    ; Limpa todos os registradores para evitar problemas
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x7C00  ; Define a pilha logo abaixo do bootloader
+
+    ; Configurar modo de vídeo texto (80x25)
     mov ah, 0x00
     mov al, 0x03
     int 0x10
 
-    ; Mensagem de carregamento
-    mov si, msg_loading
+    ; Exibir mensagem de boas-vindas
+    mov si, msg_welcome
     call print_string
 
-    ; Carregar o kernel para a memória (endereço 0x1000:0000)
-    mov ax, 0x1000
-    mov es, ax
-    mov bx, 0x0000
-    mov ah, 0x02
-    mov al, 10      ; Número de setores a ler
-    mov ch, 0
-    mov cl, 2       ; Início do kernel no setor 2
-    mov dh, 0       ; Drive 0 (Disco)
-    int 0x13
-    jc disk_error
+    ; Carregar o kernel para a memória
+    mov bx, 0x1000  ; Endereço onde o kernel será carregado
+    call load_kernel
 
-    ; Executar o kernel
-    jmp 0x1000:0000
+    ; Transferir controle para o kernel
+    jmp 0x1000  ; Executa o kernel
 
-disk_error:
-    mov si, msg_disk_error
-    call print_string
-    jmp $
+halt:
+    hlt
+    jmp halt  ; Entra em loop infinito caso algo dê errado
 
+; ---------------------------------------
+; Função: print_string
+; Exibe uma string na tela
+; ---------------------------------------
 print_string:
-    lodsb
+    lodsb   ; Carrega o próximo caractere em AL
     or al, al
     jz done
-    mov ah, 0x0E
+    mov ah, 0x0E  ; Função de imprimir caractere
     int 0x10
     jmp print_string
 done:
     ret
 
-msg_loading db "Loading micro-os...", 0
-msg_disk_error db "Disk read error!", 0
+; ---------------------------------------
+; Função: load_kernel
+; Carrega o kernel do disco para a memória
+; ---------------------------------------
+load_kernel:
+    mov ah, 0x02  ; Função para ler do disco
+    mov al, 10    ; Número de setores para ler
+    mov ch, 0     ; Cilindro 0
+    mov cl, 2     ; Setor 2 (o primeiro setor após o bootloader)
+    mov dh, 0     ; Cabeça 0
+    mov dl, 0x80  ; Primeiro disco rígido
+    int 0x13      ; Chama a interrupção de leitura do disco
+    jc disk_error ; Se falhar, pula para erro
+    ret
 
-TIMES 510-($-$$) DB 0
-DW 0xAA55  ; Assinatura do setor de boot
+disk_error:
+    mov si, msg_error
+    call print_string
+    jmp halt
+
+; ---------------------------------------
+; Mensagens
+; ---------------------------------------
+msg_welcome db "Welcome to micro-os!", 0
+msg_error db "Disk read error!", 0
+
+; Preenche até 512 bytes e define assinatura do bootloader
+times 510-($-$$) db 0
+dw 0xAA55  ; Assinatura obrigatória para ser reconhecido pelo BIOS

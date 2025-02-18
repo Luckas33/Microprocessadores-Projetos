@@ -6,7 +6,7 @@ start:
     push cs
     pop ds
 
-    ; Configurar modo de vídeo texto
+    ; Configurar modo de vídeo texto (80x25)
     mov ah, 0x00
     mov al, 0x03
     int 0x10
@@ -25,12 +25,17 @@ main_loop:
     call get_string
 
     ; Processar comando
-    cmp byte [command_buffer], 'c'
+    mov si, command_buffer
+    cmp byte [si], 'c'
     je cls_command
-    cmp byte [command_buffer], 'r'
+    cmp byte [si], 'r'
     je reboot_command
-    cmp byte [command_buffer], 'e'
+    cmp byte [si], 'e'
     je exit_command
+    cmp byte [si], 'h'
+    je help_command
+    cmp byte [si], 'd'
+    je editor_command
 
     ; Comando desconhecido
     mov si, msg_unknown
@@ -48,22 +53,98 @@ reboot_command:
     jmp 0xFFFF:0x0000
 
 exit_command:
-    hlt
+    hlt  ; Para a CPU
+
+help_command:
+    mov si, msg_help
+    call print_string
+    jmp main_loop
+
+editor_command:
+    ; Salvar o estado do kernel
+    push si
+    push di
+    push ax
+
+    ; Pular para o código do editor
+    jmp 0x2000  ; Endereço onde o editor está localizado
+
+    ; Restaurar o estado do kernel
+    pop ax
+    pop di
+    pop si
 
 print_string:
-    lodsb
-    or al, al
+    lodsb              ; Carrega o próximo caractere de SI
+    or al, al          ; Verifica se o caractere é nulo (fim da string)
     jz done
-    mov ah, 0x0E
+    mov ah, 0x0E       ; Função para imprimir caractere
     int 0x10
     jmp print_string
 done:
+    ; Após imprimir, faça a quebra de linha
+    mov al, 0x0A       ; Caracter LF (Line Feed)
+    mov ah, 0x0E       ; Função de impressão do BIOS
+    int 0x10           ; Imprime a nova linha
     ret
 
 get_string:
-    mov ah, 0x00
+    push si        ; Salvar SI
+    push ax        ; Salvar AX
+    push bx        ; Salvar BX
+    push cx        ; Salvar CX
+    
+    mov cx, 0      ; Contador de caracteres
+    mov si, di     ; SI aponta para o buffer
+    
+read_char:
+    mov ah, 0x00   ; Ler um caractere do teclado
     int 0x16
-    mov [di], al
+    
+    cmp al, 0x0D   ; Enter pressionado?
+    je end_input   ; Se sim, encerra a entrada
+
+    cmp al, 0x08   ; Backspace pressionado?
+    je handle_backspace
+    
+    ; Armazenar caractere no buffer
+    mov [si], al
+    inc si
+    inc cx
+
+    mov ah, 0x0E   ; Exibir o caractere digitado
+    int 0x10
+
+    cmp cx, 31     ; Chegou no limite do buffer?
+    jl read_char   ; Se não, continua lendo
+
+    jmp end_input  ; Se sim, encerra a entrada
+
+handle_backspace:
+    cmp cx, 0      ; Se não há caracteres, ignora o backspace
+    je read_char
+
+    dec si
+    dec cx
+
+    ; Excluir caractere da tela
+    mov ah, 0x0E
+    mov al, 0x08   ; Voltar um espaço
+    int 0x10
+    mov al, ' '    ; Sobrescrever com um espaço
+    int 0x10
+    mov al, 0x08   ; Voltar um espaço de novo
+    int 0x10
+
+    jmp read_char
+
+end_input:
+    mov byte [si], 0  ; Adicionar terminador nulo à string
+
+    pop cx        ; Restaurar CX
+    pop bx        ; Restaurar BX
+    pop ax        ; Restaurar AX
+    pop si        ; Restaurar SI
     ret
 
 clear_screen:
@@ -73,6 +154,7 @@ clear_screen:
     ret
 
 msg_welcome db "Welcome to micro-os!", 0
-prompt db "> ", 0
+msg_help db "Available commands: help, cls, reboot, exit, edit", 0
 msg_unknown db "Unknown command!", 0
+prompt db "> ", 0
 command_buffer times 32 db 0
