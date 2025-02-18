@@ -1,0 +1,438 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{geometry} % To adjust page margins
+\geometry{a4paper, margin=1in}
+\usepackage{multicol} % For multi-column formatting
+
+\title{\textbf{Relatório - Arquitetura Microprocessada}}
+\author{}
+\date{\textbf{Disciplina: Microcontroladores \\ 2024.2}}
+
+\begin{document}
+
+\maketitle
+
+\section*{Equipe Responsável}
+
+Este projeto foi desenvolvido por estudantes do curso de \textbf{Engenharia de Computação - UFC}, sob a orientação do Prof. Dr. Eng. Nícolas de Araújo Moreira da disciplina de \textbf{Microcontroladores}.
+
+\begin{multicols}{2}
+\begin{itemize}
+    \item \textbf{Lucas de Oliveira Sobral} \\
+    Matrícula: 556944
+    \item \textbf{Carlos Vinícius dos Santos Mesquita} \\
+    Matrícula: 558171
+    \item \textbf{Caio Vinícius Pessoa Freires} \\
+    Matrícula: 558169
+    \item \textbf{Mateus Andrade Maia} \\
+    Matrícula: 552593
+    \item \textbf{Matheus Simão Sales} \\
+    Matrícula: 555851
+    \item \textbf{Herik Mario Muniz Rocha} \\
+    Matrícula: 558167
+\end{itemize}
+\end{multicols}
+
+\section{Introdução}
+
+O projeto desenvolvido consiste na implementação de um processador simples utilizando Verilog, projetado para executar operações aritméticas e lógicas básicas, além de gerenciar registradores e flags. Todo o código está consolidado em um único arquivo chamado ProcessadorALL.v, que contém todos os módulos necessários para o funcionamento do sistema e o compilador está implementado no arquivo Compiler.cpp. Essa abordagem foi adotada devido à dificuldade encontrada em importar arquivos separados no ambiente de desenvolvimento utilizado.
+
+Link do Repositório: \href{https://github.com/Luckas33/Microprocessadores-Projetos/tree/main/Projeto_1/Arquitetura_Multiprocessada}{Projeto no GitHub}
+
+
+\section{Compilador}
+
+O compilador desenvolvido tem como objetivo converter instruções em linguagem de montagem (assembly) para um formato binário que pode ser utilizado diretamente por hardware ou máquinas virtuais. Este processo é baseado em um mapeamento pré-definido de comandos (mnemonics) e seus respectivos códigos binários (opcodes).
+
+\subsection{Mapeamento de Códigos}
+O compilador utiliza uma estrutura \texttt{map} para associar comandos aos seus respectivos opcodes e número de argumentos esperados. Por exemplo:
+\begin{itemize}
+    \item Comando \texttt{ADD}: opcode \texttt{00000001}, espera 2 argumentos.
+    \item Comando \texttt{SUB}: opcode \texttt{00000010}, espera 2 argumentos.
+    \item Comando \texttt{NOT}: opcode \texttt{00000100}, espera 1 argumento.
+\end{itemize}
+
+\subsection{Funcionamento do Compilador}
+O compilador lê um arquivo de entrada no formato \texttt{.asm}, processa cada linha, e escreve os comandos traduzidos em um arquivo binário no formato \texttt{.bin}. O fluxo de execução é detalhado a seguir:
+
+\begin{enumerate}
+    \item \textbf{Validação de Entrada}: O programa verifica se os arquivos \texttt{.asm} (entrada) e \texttt{.bin} (saída) foram fornecidos corretamente e se podem ser abertos.
+    \item \textbf{Leitura do Arquivo \texttt{.asm}}:
+    \begin{itemize}
+        \item Cada linha é lida e processada.
+        \item Comentários (após \texttt{;}) e espaços são removidos.
+        \item O comando é validado; se for inválido, um erro semântico é gerado.
+    \end{itemize}
+    \item \textbf{Processamento de Argumentos}:
+    \begin{itemize}
+        \item Para cada comando, verifica-se o número de argumentos esperado.
+        \item Cada argumento é validado:
+        \begin{itemize}
+            \item Deve ser binário (apenas \texttt{0} e \texttt{1}).
+            \item Deve ter o tamanho máximo permitido (8 bits, definido por \texttt{Word\_size}).
+        \end{itemize}
+        \item Argumentos inválidos ou ausentes geram erros sintáticos ou de fim de arquivo (EOF).
+    \end{itemize}
+    \item \textbf{Escrita no Arquivo Binário}: 
+    \begin{itemize}
+        \item O opcode do comando é escrito no arquivo \texttt{.bin}.
+        \item Argumentos válidos são escritos em sequência.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Mensagens de Erro}
+O compilador trata e exibe mensagens detalhadas para facilitar a identificação de problemas. Alguns exemplos incluem:
+\begin{itemize}
+    \item \textbf{Erro de Uso}: Indica que os arquivos de entrada ou saída não foram fornecidos corretamente.
+    \item \textbf{Comando Inválido}: Quando um comando não está definido no mapeamento.
+    \item \textbf{Erro Sintático}: Argumentos inválidos (não binários ou fora do tamanho permitido).
+    \item \textbf{Fim de Arquivo Antecipado (EOF)}: O arquivo termina antes que todos os argumentos sejam processados.
+\end{itemize}
+
+\subsection{Exemplo de Entrada e Saída}
+Considere o seguinte exemplo de entrada no arquivo \texttt{programa.asm}:
+\begin{verbatim}
+ADD
+10101010
+11001100
+; Comentário: operação de soma
+
+SUB
+00001111
+10101010
+\end{verbatim}
+
+A saída gerada no arquivo \texttt{programa.bin} será:
+\begin{verbatim}
+00000001
+10101010
+11001100
+00000010
+00001111
+10101010
+\end{verbatim}
+
+\subsection{Conclusão}
+Este compilador simples demonstra como transformar comandos assembly em códigos binários. Sua estrutura modular permite fácil expansão com novos comandos e maior robustez na validação de entradas.
+
+\section{Processador (linhas 3-132)}
+
+Este processador foi projetado para realizar operações aritméticas e lógicas básicas, além de implementar a funcionalidade \texttt{MOV}, que copia valores entre operandos diretamente no processador. O processador se comunica com uma \textbf{memória de instruções} externa, que armazena todas as instruções a serem executadas. A memória organiza cada instrução em registradores de 24 bits, divididos em \texttt{opcode} (8 bits) e \texttt{operand1} e \texttt{operand2} (8 bits cada).
+
+Ele é composto por três principais componentes: \textbf{Controller}, \textbf{ULA (Unidade Lógica e Aritmética)}, e o módulo principal \textbf{Processor}.  
+
+\subsection*{Componentes do Processador}
+
+\begin{itemize} 
+    \item \textbf{Controller:}  
+    O \textit{Controller} é responsável por decodificar o \texttt{opcode} recebido e determinar a operação correspondente. Ele gera sinais de controle específicos para cada tipo de operação, como enviar comandos para a ULA ou realizar diretamente a operação \texttt{MOV}.  
+
+    \item \textbf{ULA (Unidade Lógica e Aritmética):}  
+    A ULA executa as operações aritméticas e lógicas, como soma, subtração, multiplicação, divisões, e operações lógicas (\texttt{AND}, \texttt{OR}, \texttt{XOR}). No entanto, a operação \texttt{MOV} é realizada exclusivamente pelo processador e não pela ULA.  
+
+    \item \textbf{Processor:}  
+    O módulo principal integra todos os componentes e coordena o fluxo de dados. Ele realiza as seguintes funções:
+    \begin{itemize}
+        \item Lê as instruções armazenadas na memória.
+        \item Decodifica e executa cada instrução com base no \texttt{opcode}.
+        \item Coordena a comunicação com a ULA para operações aritméticas e lógicas.
+        \item Executa diretamente a operação \texttt{MOV}, copiando o valor de \texttt{operand1} para \texttt{result}.
+        \item Sincroniza o processamento com o sinal de \textit{clock} (\texttt{clk}).
+        \item Exibe o resultado e as \textit{flags} no console ao final de cada instrução.
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Ciclo de Operação}
+
+O processador opera de forma síncrona, seguindo o ciclo descrito abaixo:
+\begin{enumerate}
+    \item Durante o primeiro ciclo (\texttt{cycle\_counter = 0}), o \textbf{instruction loader} lê uma instrução de 24 bits da memória de instruções e carrega o \texttt{opcode}, \texttt{operand1} e \texttt{operand2}.
+    \item Se a instrução requer o uso da ULA (por exemplo, operações aritméticas ou lógicas), o \texttt{Controller} envia o comando correspondente e a ULA processa os valores nos ciclos subsequentes (\texttt{cycle\_counter < 3}).
+    \item Caso o \texttt{opcode} seja o de \texttt{MOV}, o processador executa a operação diretamente, copiando o valor de \texttt{operand1} para \texttt{result}, sem passar pela ULA.
+    \item Após a execução da instrução, o \texttt{result} e as \textit{flags} são atualizados e exibidos no console.
+    \item O contador de ciclos (\texttt{cycle\_counter}) é resetado para permitir a execução da próxima instrução.
+\end{enumerate}
+
+\subsection*{Operações Suportadas}
+
+O processador suporta as seguintes operações:
+
+\begin{itemize}
+    \item \textbf{Operações Aritméticas e Lógicas (ULA):}
+
+    \item \textbf{Operação \texttt{MOV} (Processor):}  
+    A operação \texttt{MOV} copia diretamente o valor de \texttt{operand1} para \texttt{result}, sem realizar cálculos ou passar pela ULA.
+\end{itemize}
+
+\subsection*{Sinais de Saída}
+
+\begin{itemize}
+    \item \texttt{result}: Contém o resultado da operação executada. No caso de \texttt{MOV}, este valor será igual a \texttt{operand1}.
+    \item \texttt{flags}: Indica o estado do processador após a execução da instrução. Cada bit possui um significado específico:
+    \begin{itemize}
+        \item \texttt{Z} (Zero Flag): Indica se o resultado é zero.  
+        \item \texttt{S} (Sign Flag): Indica o sinal do resultado (1 para negativo).  
+        \item \texttt{C} (Carry Flag): Indica \textit{carry} ou \textit{borrow}, gerado em operações aritméticas.  
+        \item \texttt{V} (Overflow Flag): Indica \textit{overflow} aritmético.  
+    \end{itemize}
+\end{itemize}
+
+\section{Memória Externa (linhas 342-358) }
+
+\subsection*{Memória de Instruções}
+
+A \textbf{memória de instruções} é responsável por armazenar o código binário a ser executado pelo processador. Cada instrução é armazenada em uma linha de 24 bits, sendo organizada da seguinte forma:
+
+\begin{itemize}
+    \item \textbf{8 bits para o \texttt{opcode}:}  
+    O \texttt{opcode} define a operação a ser realizada pelo processador. Ele é interpretado pelo \textbf{Controller} para gerar os sinais de controle necessários para a execução da instrução.
+    
+    \item \textbf{8 bits para \texttt{operand1}:}  
+    \texttt{operand1} contém o primeiro operando a ser utilizado na operação. Dependendo da operação, este operando pode ser manipulado pela ULA ou diretamente pelo processador (como no caso da operação \texttt{MOV}).
+    
+    \item \textbf{8 bits para \texttt{operand2}:}  
+    \texttt{operand2} contém o segundo operando, que será utilizado em operações que exigem dois operandos (como \texttt{ADD}, \texttt{SUB}, \texttt{MUL}, entre outras).
+\end{itemize}
+
+A cada ciclo de execução, o \textbf{instruction loader} é responsável por ler as instruções armazenadas na memória de instruções e enviá-las ao processador. O \texttt{opcode} é decodificado pelo \textbf{Controller}, que determina a operação a ser realizada, enquanto os operandos são fornecidos ao processador para o cálculo ou manipulação desejada. O processador então executa a operação, e o resultado é armazenado no registrador de \texttt{result}.
+
+Durante a execução, a memória de instruções funciona como um repositório centralizado, garantindo que as instruções sejam carregadas e processadas sequencialmente pelo processador.
+
+\section{Leitura Arquivo binário (linhas 360-500)}
+
+O processo de leitura das instruções começa com a leitura do arquivo binário contendo o código de operação, operandos e o endereço de memória, que são interpretados e executados pelo processador. Essa funcionalidade é dividida em dois módulos principais: \textbf{InstructionLoader} e \textbf{TopLevel}, que trabalham em conjunto com a memória externa.
+
+\subsection*{Módulo InstructionLoader}
+
+O \textbf{InstructionLoader} é responsável por ler as instruções do arquivo binário e prepará-las para o processador. As instruções são armazenadas em uma memória interna de 256 bytes. A leitura do arquivo binário ocorre no início da simulação, através do comando \texttt{\$readmemb}, que carrega as instruções do arquivo \texttt{instructions.bin} para a memória.
+
+Cada instrução possui 24 bits, organizados da seguinte forma:
+\begin{itemize}
+    \item \texttt{opcode} (8 bits): Código da operação a ser executada.
+    \item \texttt{operand1} (8 bits): Primeiro operando.
+    \item \texttt{operand2} (8 bits): Segundo operando.
+\end{itemize}
+
+O módulo \texttt{InstructionLoader} opera em uma máquina de estados que realiza a leitura dos dados e os envia para o processador. A sequência de estados é a seguinte:
+\begin{itemize}
+    \item \textbf{LOAD\_OPCODE}: Carrega o \texttt{opcode} da memória.
+    \item \textbf{LOAD\_OPERAND1}: Carrega o primeiro operando da memória.
+    \item \textbf{LOAD\_OPERAND2}: Carrega o segundo operando da memória.
+    \item \textbf{STORE}: Escreve os dados no banco de dados, para posteriormente serem utilizados pelo processador.
+    \item \textbf{DONE}: Indica que todas as instruções foram processadas.
+\end{itemize}
+
+\subsection*{Módulo TopLevel}
+
+O módulo \textbf{TopLevel} é responsável pela integração entre o \texttt{InstructionLoader}, a memória externa e o processador. Ele garante que o fluxo de dados entre esses componentes ocorra de forma sincronizada, possibilitando a execução das instruções armazenadas na memória de instruções.
+
+O \texttt{TopLevel} recebe o sinal de \texttt{reset} e \texttt{clk}, controlando o processo de leitura e execução das instruções. Quando o carregamento das instruções é concluído, o módulo também monitora o sinal de \texttt{done} para indicar que todas as instruções foram processadas e o processamento foi finalizado.
+
+Dentro do módulo, a \texttt{InstructionMemory} armazena e fornece as instruções lidas, enquanto o \texttt{InstructionLoader} realiza o carregamento dessas instruções do arquivo binário para a memória. O \texttt{Processor} então executa as operações baseadas nas instruções carregadas.
+
+A integração entre esses módulos permite a execução de uma sequência de instruções programadas, com um controle eficiente de início e término de cada ciclo de operação.
+
+
+
+\section{Unidade Lógica e Aritmética (ULA) (linhas 176-338)}
+
+A Unidade Lógica e Aritmética (ULA) é um componente fundamental de um processador, responsável pela execução de operações aritméticas e lógicas. Ela desempenha um papel crucial na execução de instruções, sendo projetada para realizar cálculos matemáticos, manipulação de bits e comparações lógicas.
+
+\subsection*{Principais Funções da ULA}
+
+A ULA é projetada para executar as seguintes operações básicas:
+
+\begin{itemize}
+    \item \textbf{Operações aritméticas:}
+    \begin{itemize}
+        \item Soma (\texttt{ADD}): $C = A + B$
+        \item Subtração (\texttt{SUB}): $C = A - B$
+        \item Multiplicação (\texttt{MUL}): $C = A \times B$
+        \item Divisão (\texttt{DIV}): $C = \frac{A}{B}$
+        \item Módulo (\texttt{MOD}): Resto da divisão inteira
+    \end{itemize}
+    \item \textbf{Operações lógicas:}
+    \begin{itemize}
+        \item AND: $C = A \land B$
+        \item OR: $C = A \lor B$
+        \item XOR: $C = A \oplus B$
+        \item NOT: $C = \neg A$
+        \item NOR: $C = \neg(A \lor B)$ 
+        \item NAND: $C = \neg(A \land B)$ 
+        \item XNOR: $C = \neg(A \oplus B)$ 
+        \item MOD: $C = A \bmod B$ 
+        \item SLL: $C = A << 1$  (Deslocamento lógico para a esquerda)
+        \item SRL: $C = A >> 1$  (Deslocamento lógico para a direita)
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Arquitetura da ULA}
+
+A ULA consiste em um conjunto de circuitos combinacionais que recebem como entrada:
+\begin{itemize}
+    \item Até dois operandos (\texttt{operand1} e \texttt{operand2});
+    \item Um código de operação (\texttt{Opcode}) que define a operação a ser realizada;
+    \item Sinais de controle para configurar a execução.
+\end{itemize}
+
+A saída da ULA é o resultado da operação solicitada, juntamente com \textbf{flags} de status que indicam condições especiais, como:
+\begin{itemize}
+    \item \textbf{Zero Flag (Z):} Indica se o resultado é zero;
+    \item \textbf{Carry Flag (C):} Indica um carry-out (transbordo) em operações aritméticas;
+    \item \textbf{Overflow Flag (O):} Indica ocorrência de overflow;
+    \item \textbf{Sign Flag (S):} Indica se o resultado é negativo.
+\end{itemize}
+
+\subsection*{Importância da ULA}
+
+A ULA é um dos componentes mais críticos de qualquer unidade de processamento. Sua eficiência e capacidade de executar operações complexas diretamente influenciam o desempenho geral do processador. Em arquiteturas modernas, a ULA também é projetada para suportar instruções vetoriais e paralelismo, permitindo um aumento significativo na performance em aplicações específicas.
+
+\section{Registrador (linhas 134-148)}
+
+O módulo \texttt{Register} implementa um registrador básico de 8 bits, utilizado para armazenar e reter dados entre ciclos de clock. Ele é projetado para operar de forma síncrona com o sinal de \texttt{clock} e oferece uma funcionalidade de \texttt{reset} para inicialização assíncrona. Abaixo, detalhamos o funcionamento e as características do registrador.
+
+\subsection{Entradas e Saídas}
+O módulo possui os seguintes sinais de entrada e saída:
+\begin{itemize}
+    \item \textbf{\texttt{clk}}: Entrada de clock, utilizada para sincronizar as operações do registrador.
+    \item \textbf{\texttt{reset}}: Entrada de reset assíncrono. Quando ativada, força o registrador a zerar (\texttt{data\_out = 8'b0}).
+    \item \textbf{\texttt{data\_in}}: Entrada de 8 bits que contém o dado a ser armazenado no registrador.
+    \item \textbf{\texttt{data\_out}}: Saída de 8 bits que mantém o valor armazenado no registrador.
+\end{itemize}
+
+\subsection{Funcionamento do Registrador}
+O comportamento do módulo é definido pelo bloco \texttt{always}, que responde a mudanças no sinal de clock (\texttt{posedge clk}) ou no sinal de reset (\texttt{posedge reset}). O funcionamento é descrito abaixo:
+\begin{itemize}
+    \item Quando o sinal de \texttt{reset} está ativo (\texttt{1}), o registrador é imediatamente zerado (\texttt{data\_out <= 8'b0}), independentemente do sinal de clock.
+    \item Quando o \texttt{reset} está inativo (\texttt{0}), o registrador armazena o valor presente em \texttt{data\_in} no flanco de subida do \texttt{clk}.
+\end{itemize}
+
+\subsection{Vantagens e Aplicações}
+O registrador é um elemento fundamental nos sistemas digitais, com diversas aplicações, incluindo:
+\begin{itemize}
+    \item \textbf{Armazenamento Temporário}: Manter dados intermediários em processadores e circuitos digitais.
+    \item \textbf{Sincronização de Dados}: Garantir que os dados sejam processados em momentos específicos com base no sinal de clock.
+    \item \textbf{Implementação de Pipelines}: Utilizado para dividir operações complexas em etapas menores e síncronas.
+\end{itemize}
+
+\subsection{Conclusão}
+O módulo de registrador exemplifica a construção de um elemento de memória simples e eficiente em Verilog. Sua utilização permite a criação de circuitos digitais complexos, sendo indispensável em arquiteturas computacionais modernas.
+
+\section{Diagrama de blocos}
+
+O diagrama de blocos de um processador é uma representação visual que ilustra a organização e a interação dos principais componentes dentro de um processador. Ele serve para demonstrar como os dados fluem entre os diferentes módulos e como as operações são realizadas. Através desse diagrama, é possível visualizar as conexões entre a Unidade Lógica e Aritmética (ULA), registradores, barramentos de dados, memória, e os módulos de controle.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{Diagrama do Processador (2).png}
+    \caption{Enter Caption}
+    \label{fig:enter-label}
+\end{figure}
+
+
+\section{Tabela de Opcodes}
+
+A tabela de opcodes é uma estrutura fundamental na arquitetura de processadores, que mapeia códigos binários (opcodes) para operações específicas executadas pelo processador. Cada opcode corresponde a uma operação aritmética, lógica ou de controle que o processador deve realizar. Essa tabela facilita a execução do código, pois traduz as instruções codificadas em um formato compreensível para o processador.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|l|c|}
+\hline
+\textbf{Opcode} & \textbf{Instrução} & \textbf{Operação}          & \textbf{Tipo}         \\ \hline
+0001                 & ADD                & Soma operandos                      & Aritmética            \\ \hline
+0010                 & SUB                & Subtração dos operandos             & Aritmética            \\ \hline
+0011                 & MUL                & Multiplicação dos operandos         & Aritmética            \\ \hline
+0100                 & DIV                & Divisão dos operandos               & Aritmética            \\ \hline
+0101                 & MOD                & Resto da divisão                    & Aritmética            \\ \hline
+0110                 & AND                & Operação lógica "E"                 & Lógica                \\ \hline
+0111                 & OR                 & Operação lógica "Ou"                & Lógica                \\ \hline
+1000                 & XOR                & Operação lógica "Ou exclusivo"      & Lógica                \\ \hline
+1001                 & NOT                & Operação lógica "Negado"            & Lógica                \\ \hline
+1010                 & NOR                & Operação lógica "Ou negado"         & Lógica                \\ \hline
+1011                 & NAND               & Operação lógica "E negado"          & Lógica                \\ \hline
+1100                 & XNOR               & Operação lógica "Não-OU Exclusivo"  & Lógica                \\ \hline
+1101                 & MOV                & Transferência de dados              & Lógica                \\ \hline
+1110                 & SLL                & Deslocamento lógico à esquerda      & Lógica                \\ \hline
+1111                 & SRL                & Deslocamento lógico à direita       & Lógica                \\ \hline
+
+\end{tabular}
+\caption{Tabela de opcodes da ULA com tipo de operação}
+\label{tab:opcodes_ula}
+\end{table}
+
+
+\section{Tabela dos Registradores}
+
+A tabela de registradores é uma estrutura essencial para entender como os dados são armazenados e manipulados dentro de um processador. Os registradores são pequenas áreas de armazenamento de alta velocidade localizadas dentro da Unidade de Processamento Central (CPU) e são usadas para armazenar dados temporários, instruções, endereços e resultados intermediários das operações.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline
+        \textbf{Registrador} & \textbf{Sinal de Entrada} & \textbf{Descrição} \\
+        \hline
+        \textbf{regA} & operand1 & Armazena o primeiro operando utilizado nas operações da ULA. \\
+        \hline
+        \textbf{regB} & operand2 & Armazena o segundo operando utilizado nas operações da ULA. \\
+        \hline
+        \textbf{regC} & ula\_result & Armazena o resultado das operações realizadas pela ULA. \\
+        \hline
+    \end{tabular}
+    \caption{Tabela de Registradores}
+    \label{tab:registers}
+\end{table}
+
+
+
+\section{Mapa de Memória e Endereçamento}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline
+        \textbf{Endereço (Hexadecimal)} & \textbf{Registrador/Conteúdo} & \textbf{Descrição} \\
+        \hline
+        0x0000 & RegA & Primeiro operando da ULA. \\
+        \hline
+        0x0001 & RegB & Segundo operando da ULA. \\
+        \hline
+        0x0002 & RegC & Resultado das operações da ULA. \\
+        \hline
+        0x0003 & Opcode & Código da operação a ser executada. \\
+        \hline
+        0x0004 & Flags & Armazena indicadores (Zero, Carry, Overflow, etc.). \\
+        \hline
+        0x0005 - 0x000F & RegX - RegY & Registradores de uso geral. \\
+        \hline
+        0x0100 & Início do Programa & Início do código executável. \\
+        \hline
+        0x0101 & Opcode da Instrução Atual & Código da operação a ser executada. \\
+        \hline
+        0x0102 & Endereço do 1º Operando & Endereço do primeiro operando. \\
+        \hline
+        0x0103 & Endereço do 2º Operando & Endereço do segundo operando. \\
+        \hline
+        0x0104 - 0x07FF & Instruções Subsequentes & Contém as instruções subsequentes do programa. \\
+        \hline
+    \end{tabular}
+    \caption{Mapa de Memória com Registradores, Flags e Instruções}
+    \label{tab:memory_map_extended}
+\end{table}
+
+
+
+
+\section{Considerações finais}
+
+O desenvolvimento deste projeto de arquitetura microprocessada, no contexto da disciplina de \textbf{Microcontroladores}, proporcionou uma experiência prática essencial para consolidar os conceitos teóricos aprendidos em sala de aula. A implementação dos componentes, como registradores, unidade lógica e aritmética (ULA), e o sistema de controle, permitiu aos integrantes explorar a complexidade e a importância dos microprocessadores na computação moderna.
+
+Além disso, a elaboração do relatório técnico promoveu a organização e a clareza na documentação de sistemas, uma habilidade indispensável para futuros engenheiros de computação. Durante o projeto, enfrentamos desafios relacionados à integração dos módulos e à validação do funcionamento correto das operações lógicas e aritméticas, o que nos estimulou a trabalhar em equipe e a buscar soluções eficientes.
+
+Por fim, o projeto reforçou a importância do planejamento e da atenção aos detalhes no desenvolvimento de sistemas computacionais. A capacidade de mapear e solucionar problemas em cada etapa do processo é uma competência que será amplamente utilizada em nossa trajetória acadêmica e profissional. Estamos confiantes de que o aprendizado adquirido contribuirá significativamente para nossa formação como engenheiros.
+
+
+\end{document}
