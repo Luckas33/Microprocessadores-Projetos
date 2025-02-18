@@ -9,11 +9,10 @@ module Processador (
 );
 
     // Conexões internas
-    wire [3:0] ula_operation;
     wire [7:0] ula_result;
     wire [7:0] regA_out, regB_out, regC_out;
     wire [7:0] ula_flags;
-
+    wire [3:0] ula_operation;
     // Instância dos registradores
     Register regA(.clk(clk), .reset(reset), .data_in(operand1), .data_out(regA_out));
     Register regB(.clk(clk), .reset(reset), .data_in(operand2), .data_out(regB_out));
@@ -27,7 +26,7 @@ module Processador (
 
     // Instância da ULA
     ULA ula(
-        .opcode(ula_operation),
+        .ula_operation(ula_operation),
         .operand1(regA_out),
         .operand2(regB_out),
         .result(ula_result),
