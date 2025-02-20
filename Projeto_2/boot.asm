@@ -48,14 +48,14 @@ done:
 ; Carrega o kernel do disco para a memória
 ; ---------------------------------------
 load_kernel:
-    mov ah, 0x02  ; Função para ler do disco
-    mov al, 10    ; Número de setores para ler
-    mov ch, 0     ; Cilindro 0
-    mov cl, 2     ; Setor 2 (o primeiro setor após o bootloader)
-    mov dh, 0     ; Cabeça 0
-    mov dl, 0x80  ; Primeiro disco rígido
-    int 0x13      ; Chama a interrupção de leitura do disco
-    jc disk_error ; Se falhar, pula para erro
+    mov ah, 0x02    ; Função para ler do disco
+    mov al, 10       ; Número de setores para ler (ler 1 setor)
+    mov ch, 0       ; Cilindro 0
+    mov cl, 2       ; Setor 2 (o primeiro setor após o bootloader)
+    mov dh, 0       ; Cabeça 0
+    mov dl, 0x80    ; Primeiro disco rígido
+    int 0x13        ; Chama a interrupção de leitura do disco
+    jc disk_error   ; Se falhar, pula para erro
     ret
 
 disk_error:
@@ -68,7 +68,6 @@ disk_error:
 ; ---------------------------------------
 msg_welcome db "Welcome to micro-os!", 0
 msg_error db "Disk read error!", 0
-
 ; Preenche até 512 bytes e define assinatura do bootloader
 times 510-($-$$) db 0
 dw 0xAA55  ; Assinatura obrigatória para ser reconhecido pelo BIOS
