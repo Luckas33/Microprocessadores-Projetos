@@ -1,63 +1,90 @@
-# Projeto 2 - Microprocessadores
 
-## Sistema Operacional
+# Documentação do Projeto 2
 
-## Descrição
+## Equipe:
 
-Este projeto tem como objetivo a criação de um mini sistema operacional que inclui:
+* Lucas de Oliveira Sobral - 556944
+* Mateus Andrade Maia - 552593
+* Caio Vinícius Pessoa Freires - 558169
+* Carlos Vinícius dos Santos Mesquita - 558171
+* Matheus Simão Sales - 555851
+* Herik Mario Muniz Rocha - 558167
 
-* Um **bootloader** capaz de inicializar o sistema;
-* Um **kernel** responsável pelo gerenciamento básico de hardware e execução de aplicações;
-* Um **editor de texto** simples para testar o funcionamento do sistema.
+## Objetivo
 
-### Estrutura do Projeto
+Criar um bootloader e um nano kernel de um sistema operacional minimalista.
 
-O projeto é dividido em três partes principais:
+## Requisitos
 
-1. **Bootloader**:
-   * Carrega o kernel na memória;
-   * Inicializa os registradores e prepara o ambiente de execução;
-   * Passa o controle para o kernel.
-2. **Kernel**:
-   * Configuração de interrupções;
-   * Gerenciamento de memória;
-   * Manipulação básica de entrada e saída (I/O);
-   * Suporte a chamadas de sistema básicas.
-3. **Editor de Texto**:
-   * Interface simples baseada em texto;
-   * Suporte a entrada e saída via teclado e tela;
-   * Possibilidade de salvar e carregar arquivos.
+* Bootloader
+* Deve implementar um sistema de arquivos com alocação contínua.
+* Ser monousuário.
+* Ser monotarefa.
+* Sem interface gráfica (somente linha de comando).
+* Capaz de reiniciar o computador.
+* Capaz de carregar uma aplicação de teste.
 
-### Tecnologias Utilizadas
+## Estrutura do Código:
 
-* Linguagem Assembly para o bootloader
-* Linguagem C para o kernel e editor de texto
-* Ferramentas:
-  * **NASM** para montagem do bootloader
-  * **GCC** para compilar o kernel e o editor
-  * **QEMU** para testes e emulação
+### Bootloader (boot.asm)
 
-### Como Executar
+O bootloader é responsável por carregar o kernel para a memória e transferir o controle para ele.
 
-1. **Compilar o bootloader**:
+#### Principais Funções:
+
+* **print_string**: Exibe uma string na tela.
+* **load_kernel**: Carrega o kernel do disco para a memória.
+* **disk_error**: Exibe uma mensagem de erro caso ocorra uma falha ao ler o disco.
+
+### Kernel (kernel.asm)
+
+O kernel fornece uma interface de linha de comando para interagir com o sistema.
+
+#### Funcionalidades:
+
+* Exibição de mensagens de boas-vindas.
+* Prompt de comando para entrada do usuário.
+* Reconhecimento de comandos:
+  * `<span>cls</span>`: Limpa a tela.
+  * `<span>reboot</span>`: Reinicia o computador.
+  * `<span>exit</span>`: Entra em modo de espera (halt).
+  * `<span>help</span>`: Exibe os comandos disponíveis.
+  * `<span>edit</span>`: (Em desenvolvimento) Chamaria um editor de texto.
+
+#### Principais Funções:
+
+* **print_string**: Exibe uma string na tela.
+* **get_string**: Captura a entrada do usuário.
+* **clear_screen**: Limpa a tela.
+
+## Como executar
+
+Para compilar e rodar o sistema operacional, siga os passos abaixo:
+
+1. **Instalar o NASM**: O NASM (“Netwide Assembler”) é necessário para compilar os arquivos Assembly.
+
    ```
-   nasm -f bin boot.asm -o bootloader.bin
+   sudo apt install nasm
    ```
-2. **Compilar o kernel**:
+2. **Compilar os arquivos**: usando nasm
+
    ```
-   nasm -ffreestanding -m32 -c kernel.asm -o kernel.bin
-   ld -m elf_i386 -T linker.ld -o kernel.bin kernel.bin
+   nasm -f bin boot.asm -o boot.bin
+   nasm -f bin kernel.asm -o kernel.bin
    ```
-3. **Criar a imagem do sistema**:
+3. **Criar a imagem do sistema**: No Linux, podemos usar o seguinte comando para criar a imagem final:
+
    ```
-   cat bootloader.bin kernel.bin > os.img
+   dd if=/dev/zero of=system.img bs=512 count=2880
+   dd if=bootloader.bin of=system.img conv=notrunc
+   dd if=kernel.bin of=system.img seek=1 conv=notrunc
    ```
-4. **Rodar no QEMU**:
+4. **Executar a imagem**: em um terminal normal no diretório da pasta
+
    ```
-   qemu-system-i386 -drive format=raw,file=os.img
+   qemu-system-x86_64 -drive format=raw,file=system.img
    ```
 
-### Autores
+## Considerações Finais
 
-* [Seu Nome]
-* [Outros Colaboradores]
+Este projeto tem como foco a compreensão da inicialização de sistemas operacionais e a interação com hardware em baixo nível. Ele pode ser expandido no futuro para suportar mais funcionalidades.
