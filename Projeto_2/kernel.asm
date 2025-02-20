@@ -1,5 +1,5 @@
 BITS 16
-ORG 0x0000
+ORG 0x1000
 
 start:
     ; Configurar segmento de dados
