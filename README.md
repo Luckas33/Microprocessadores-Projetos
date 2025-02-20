@@ -1,4 +1,4 @@
-# Documentação dos Projetos de Microprocessadores
+# Projetos de Microprocessadores
 
 ## Projeto 1 - Desenvolvimento de um Processador
 ### Objetivo
