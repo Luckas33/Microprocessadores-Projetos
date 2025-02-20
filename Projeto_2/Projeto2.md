@@ -1,5 +1,6 @@
-
 # Documentação do Projeto 2
+
+Este projeto tem como foco a compreensão da inicialização de sistemas operacionais e a interação com hardware em baixo nível. Ele pode ser expandido no futuro para suportar mais funcionalidades.
 
 ## Equipe:
 
@@ -84,7 +85,3 @@ Para compilar e rodar o sistema operacional, siga os passos abaixo:
    ```
    qemu-system-x86_64 -drive format=raw,file=system.img
    ```
-
-## Considerações Finais
-
-Este projeto tem como foco a compreensão da inicialização de sistemas operacionais e a interação com hardware em baixo nível. Ele pode ser expandido no futuro para suportar mais funcionalidades.
