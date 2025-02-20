@@ -10,15 +10,24 @@ start:
     mov ah, 0x00
     mov al, 0x03
     int 0x10
-
+    
     ; Exibir mensagem de boas-vindas
     mov si, msg_welcome
     call print_string
 
 main_loop:
+    call new_line         ; Adiciona a quebra de linha antes de exibir o prompt
     ; Exibir prompt
     mov si, prompt
     call print_string
+
+    ; Limpar buffer de comando antes de ler uma nova entrada
+    mov si, command_buffer
+    mov cx, 32
+clear_buffer:
+    mov byte [si], 0
+    inc si
+    loop clear_buffer
 
     ; Ler comando do usuário
     mov di, command_buffer
@@ -26,19 +35,39 @@ main_loop:
 
     ; Processar comando
     mov si, command_buffer
-    cmp byte [si], 'c'
-    je cls_command
-    cmp byte [si], 'r'
-    je reboot_command
-    cmp byte [si], 'e'
-    je exit_command
-    cmp byte [si], 'h'
+    ; Comparação para comando 'help'
+    mov di, msg_help_command
+    call compare_strings
     je help_command
-    cmp byte [si], 'd'
-    je editor_command
+
+    ; Comparação para comando 'cls'
+    mov di, msg_cls_command
+    call compare_strings
+    je cls_command
+
+    ; Comparação para comando 'reboot'
+    mov di, msg_reboot_command
+    call compare_strings
+    je reboot_command
+
+    ; Comparação para comando 'exit'
+    mov di, msg_exit_command
+    call compare_strings
+    je exit_command
+
+    ; Comparação para comando 'edit'
+    mov di, msg_edit_command
+    call compare_strings
+    je edit_command
 
     ; Comando desconhecido
     mov si, msg_unknown
+    call print_string
+    jmp main_loop
+
+help_command:
+    call new_line         ; Adiciona a quebra de linha antes da resposta
+    mov si, msg_help
     call print_string
     jmp main_loop
 
@@ -47,33 +76,46 @@ cls_command:
     jmp main_loop
 
 reboot_command:
+    call new_line         ; Adiciona quebra de linha antes de reiniciar
     mov ax, 0x0040
     mov ds, ax
     mov word [0x0072], 0x0000
     jmp 0xFFFF:0x0000
 
 exit_command:
+    call new_line
     hlt  ; Para a CPU
 
-help_command:
-    mov si, msg_help
+edit_command:
+    call new_line
+    mov si, msg_enter_filename
     call print_string
-    jmp main_loop
 
-editor_command:
-    ; Salvar o estado do kernel
-    push si
-    push di
-    push ax
+    mov di, filename_buffer
+    call get_string
+    
+    ; Aqui, deve-se garantir que o editor será chamado
+    ; Saltando para o editor para interação com o arquivo
+    jmp 0x2000  ; Salta diretamente para o editor
 
-    ; Pular para o código do editor
-    jmp 0x2000  ; Endereço onde o editor está localizado
+edit_file:
+    call new_line
+    mov si, msg_editing
+    call print_string
 
-    ; Restaurar o estado do kernel
-    pop ax
-    pop di
-    pop si
+    mov di, file_content_buffer
+    call get_string  ; Usuário digita o conteúdo
 
+    call save_file   ; Salvar ao pressionar Enter
+    ret
+
+save_file:
+    call new_line
+    mov si, msg_saved
+    call print_string
+    ret
+
+; Função para imprimir strings e adicionar quebra de linha ao final
 print_string:
     lodsb              ; Carrega o próximo caractere de SI
     or al, al          ; Verifica se o caractere é nulo (fim da string)
@@ -82,12 +124,25 @@ print_string:
     int 0x10
     jmp print_string
 done:
-    ; Após imprimir, faça a quebra de linha
-    mov al, 0x0A       ; Caracter LF (Line Feed)
-    mov ah, 0x0E       ; Função de impressão do BIOS
-    int 0x10           ; Imprime a nova linha
     ret
 
+; **Nova função para adicionar quebra de linha e retorno ao início**
+new_line:
+    mov ah, 0x0E
+    mov al, 0x0D       ; Carriage Return (Volta ao início da linha)
+    int 0x10
+    mov al, 0x0A       ; Line Feed (Move para a linha de baixo)
+    int 0x10
+    ret
+
+; Função para limpar a tela
+clear_screen:
+    mov ah, 0x00
+    mov al, 0x03
+    int 0x10
+    ret
+
+; Função para ler uma string do teclado
 get_string:
     push si        ; Salvar SI
     push ax        ; Salvar AX
@@ -147,14 +202,53 @@ end_input:
     pop si        ; Restaurar SI
     ret
 
-clear_screen:
-    mov ah, 0x00
-    mov al, 0x03
-    int 0x10
+; Função para comparar duas strings
+compare_strings:
+    push ax
+    push bx
+    push cx
+    push dx
+
+compare_loop:
+    mov al, [si]      ; Carrega o caractere de si (comando do usuário)
+    mov bl, [di]      ; Carrega o caractere de di (comando esperado)
+    cmp al, bl        ; Compara os caracteres
+    jne not_equal     ; Se diferentes, vai para not_equal
+    inc si
+    inc di
+    cmp al, 0         ; Verifica se chegou ao final da string
+    je strings_equal
+    jmp compare_loop
+
+not_equal:
+    pop dx
+    pop cx
+    pop bx
+    pop ax
     ret
 
-msg_welcome db "Welcome to micro-os!", 0
-msg_help db "Available commands: help, cls, reboot, exit, edit", 0
-msg_unknown db "Unknown command!", 0
+strings_equal:
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+; Mensagens para o sistema
+msg_welcome db "Bem-vindo ao micro-os!", 0
+msg_help db "Comandos disponíveis: help, cls, reboot, sair, editar", 0
+msg_unknown db "Comando desconhecido!", 0
+msg_enter_filename db "Digite o nome do arquivo: ", 0
+msg_editing db "Editando... Digite e pressione Enter para salvar.", 0
+msg_saved db "Arquivo salvo!", 0
 prompt db "> ", 0
 command_buffer times 32 db 0
+file_content_buffer times 512 db 0  ; Buffer para o conteúdo do arquivo
+filename_buffer times 12 db 0       ; Buffer para o nome do arquivo
+
+; Comandos para comparação
+msg_help_command db "help", 0
+msg_cls_command db "cls", 0
+msg_reboot_command db "reboot", 0
+msg_exit_command db "sair", 0
+msg_edit_command db "editar", 0
