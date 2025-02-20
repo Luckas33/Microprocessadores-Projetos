@@ -46,11 +46,11 @@ O kernel fornece uma interface de linha de comando para interagir com o sistema.
 * Exibição de mensagens de boas-vindas.
 * Prompt de comando para entrada do usuário.
 * Reconhecimento de comandos:
-  * `<span>cls</span>`: Limpa a tela.
-  * `<span>reboot</span>`: Reinicia o computador.
-  * `<span>exit</span>`: Entra em modo de espera (halt).
-  * `<span>help</span>`: Exibe os comandos disponíveis.
-  * `<span>edit</span>`: (Em desenvolvimento) Chamaria um editor de texto.
+  * `cls`: Limpa a tela.
+  * `reboot`: Reinicia o computador.
+  * `exit`: Entra em modo de espera (halt).
+  * `help>`: Exibe os comandos disponíveis.
+  * `edit`: (Em desenvolvimento) Chamaria um editor de texto.
 
 #### Principais Funções:
 
