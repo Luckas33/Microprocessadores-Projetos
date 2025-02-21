@@ -55,6 +55,16 @@ clear_buffer:
     call compare_strings
     je exit_command
 
+    ; Comparação para comando 'ls'
+    mov di, msg_ls_command
+    call compare_strings
+    je ls_command
+
+    ; Comparação para comando 'echo'
+    mov di, msg_echo_command
+    call compare_strings
+    je echo_command
+
     ; Comparação para comando 'edit'
     mov di, msg_edit_command
     call compare_strings
@@ -83,31 +93,72 @@ reboot_command:
     jmp 0xFFFF:0x0000
 
 exit_command:
+    ; Loop infinito para "travar" o sistema
+    jmp $
+
+ls_command:
+    call list_files
+    jmp main_loop
+
+echo_command:
     call new_line
-    hlt  ; Para a CPU
+    ; Extrair nome do arquivo e conteúdo
+    mov si, command_buffer + 5  ; Pula "echo "
+    mov di, filename_buffer
+    call extract_filename
+    mov si, command_buffer + 5
+    call skip_spaces
+    mov di, file_content_buffer
+    call extract_content
+
+    ; Criar arquivo
+    call create_file
+    jmp main_loop
 
 edit_command:
     call new_line
-    mov si, msg_enter_filename
-    call print_string
-
+    ; Extrair nome do arquivo
+    mov si, command_buffer + 5  ; Pula "edit "
     mov di, filename_buffer
-    call get_string
-    
-    ; Aqui, deve-se garantir que o editor será chamado
-    ; Saltando para o editor para interação com o arquivo
-    jmp 0x2000  ; Salta diretamente para o editor
+    call extract_filename
 
-edit_file:
-    call new_line
-    mov si, msg_editing
+    ; Verificar se o arquivo existe
+    call find_file
+    jc file_not_found_func
+
+    ; Abrir editor
+    call open_editor
+    jmp main_loop
+
+file_not_found_func:
+    mov si, msg_file_not_found
     call print_string
+    jmp main_loop
 
-    mov di, file_content_buffer
-    call get_string  ; Usuário digita o conteúdo
+; Função para abrir o editor
+open_editor:
+    ; Exibir conteúdo do arquivo
+    mov si, file_content_buffer
+    call print_string
+    call new_line
 
-    call save_file   ; Salvar ao pressionar Enter
-    ret
+editor_loop:
+    ; Ler entrada do usuário
+    mov ah, 0x00
+    int 0x16
+
+    ; Verificar atalhos
+    cmp al, 0x13  ; Ctrl+S (Salvar)
+    je save_file
+    cmp al, 0x11  ; Ctrl+Q (Sair)
+    je close_editor
+
+    ; Adicionar caractere ao buffer
+    mov [si], al
+    inc si
+    mov ah, 0x0E
+    int 0x10
+    jmp editor_loop
 
 save_file:
     call new_line
@@ -115,23 +166,135 @@ save_file:
     call print_string
     ret
 
-; Função para imprimir strings e adicionar quebra de linha ao final
+close_editor:
+    call new_line
+    ret
+
+; Função para listar arquivos
+list_files:
+    mov si, file_table
+    mov cl, [file_count]
+    cmp cl, 0
+    je no_files
+
+list_loop:
+    mov di, si
+    call print_string
+    call new_line
+    add si, filename_length + file_content_length
+    loop list_loop
+    ret
+
+no_files:
+    mov si, msg_no_files
+    call print_string
+    ret
+
+; Função para criar um arquivo
+create_file:
+    mov si, filename_buffer
+    mov di, file_table
+    mov cl, [file_count]
+    cmp cl, max_files
+    jge too_many_files
+
+    ; Copiar nome do arquivo
+    mov cx, filename_length
+    rep movsb
+
+    ; Copiar conteúdo do arquivo
+    mov si, file_content_buffer
+    mov cx, file_content_length
+    rep movsb
+
+    ; Incrementar contador de arquivos
+    inc byte [file_count]
+    ret
+
+too_many_files:
+    mov si, msg_too_many_files
+    call print_string
+    ret
+
+; Função para encontrar um arquivo
+find_file:
+    mov si, filename_buffer
+    mov di, file_table
+    mov cl, [file_count]
+    cmp cl, 0
+    je file_not_found_message
+
+find_loop:
+    push si
+    push di
+    mov cx, filename_length
+    repe cmpsb
+    pop di
+    pop si
+    je file_found
+
+    add di, filename_length + file_content_length
+    loop find_loop
+
+file_not_found_message:
+    mov si, msg_file_not_found
+    call print_string
+    ret
+
+file_found:
+    ret
+
+; Funções auxiliares
+extract_filename:
+    ; Copia o nome do arquivo até o primeiro espaço
+    mov cx, filename_length
+extract_loop:
+    lodsb
+    cmp al, ' '
+    je extract_done
+    stosb
+    loop extract_loop
+extract_done:
+    ret
+
+extract_content:
+    ; Copia o conteúdo após o nome do arquivo
+    mov cx, file_content_length
+extract_content_loop:
+    lodsb
+    cmp al, 0
+    je extract_content_done
+    stosb
+    loop extract_content_loop
+extract_content_done:
+    ret
+
+skip_spaces:
+    ; Pula espaços em branco
+skip_loop:
+    lodsb
+    cmp al, ' '
+    je skip_loop
+    dec si
+    ret
+
+; Função para imprimir strings
 print_string:
-    lodsb              ; Carrega o próximo caractere de SI
-    or al, al          ; Verifica se o caractere é nulo (fim da string)
+    lodsb
+    or al, al
     jz done
-    mov ah, 0x0E       ; Função para imprimir caractere
+    mov ah, 0x0E
     int 0x10
     jmp print_string
 done:
     ret
 
-; **Nova função para adicionar quebra de linha e retorno ao início**
+; Função para adicionar nova linha
 new_line:
     mov ah, 0x0E
-    mov al, 0x0D       ; Carriage Return (Volta ao início da linha)
+    mov al, 0x0D
     int 0x10
-    mov al, 0x0A       ; Line Feed (Move para a linha de baixo)
+    mov al, 0x0A
     int 0x10
     ret
 
@@ -144,65 +307,63 @@ clear_screen:
 
 ; Função para ler uma string do teclado
 get_string:
-    push si        ; Salvar SI
-    push ax        ; Salvar AX
-    push bx        ; Salvar BX
-    push cx        ; Salvar CX
+    push si
+    push ax
+    push bx
+    push cx
     
-    mov cx, 0      ; Contador de caracteres
-    mov si, di     ; SI aponta para o buffer
+    mov cx, 0
+    mov si, di
     
 read_char:
-    mov ah, 0x00   ; Ler um caractere do teclado
+    mov ah, 0x00
     int 0x16
     
-    cmp al, 0x0D   ; Enter pressionado?
-    je end_input   ; Se sim, encerra a entrada
+    cmp al, 0x0D
+    je end_input
 
-    cmp al, 0x08   ; Backspace pressionado?
+    cmp al, 0x08
     je handle_backspace
     
-    ; Armazenar caractere no buffer
     mov [si], al
     inc si
     inc cx
 
-    mov ah, 0x0E   ; Exibir o caractere digitado
+    mov ah, 0x0E
     int 0x10
 
-    cmp cx, 31     ; Chegou no limite do buffer?
-    jl read_char   ; Se não, continua lendo
+    cmp cx, 31
+    jl read_char
 
-    jmp end_input  ; Se sim, encerra a entrada
+    jmp end_input
 
 handle_backspace:
-    cmp cx, 0      ; Se não há caracteres, ignora o backspace
+    cmp cx, 0
     je read_char
 
     dec si
     dec cx
 
-    ; Excluir caractere da tela
     mov ah, 0x0E
-    mov al, 0x08   ; Voltar um espaço
+    mov al, 0x08
     int 0x10
-    mov al, ' '    ; Sobrescrever com um espaço
+    mov al, ' '
     int 0x10
-    mov al, 0x08   ; Voltar um espaço de novo
+    mov al, 0x08
     int 0x10
 
     jmp read_char
 
 end_input:
-    mov byte [si], 0  ; Adicionar terminador nulo à string
+    mov byte [si], 0
 
-    pop cx        ; Restaurar CX
-    pop bx        ; Restaurar BX
-    pop ax        ; Restaurar AX
-    pop si        ; Restaurar SI
+    pop cx
+    pop bx
+    pop ax
+    pop si
     ret
 
-; Função para comparar duas strings
+; Função para comparar strings
 compare_strings:
     push ax
     push bx
@@ -210,13 +371,13 @@ compare_strings:
     push dx
 
 compare_loop:
-    mov al, [si]      ; Carrega o caractere de si (comando do usuário)
-    mov bl, [di]      ; Carrega o caractere de di (comando esperado)
-    cmp al, bl        ; Compara os caracteres
-    jne not_equal     ; Se diferentes, vai para not_equal
+    mov al, [si]
+    mov bl, [di]
+    cmp al, bl
+    jne not_equal
     inc si
     inc di
-    cmp al, 0         ; Verifica se chegou ao final da string
+    cmp al, 0
     je strings_equal
     jmp compare_loop
 
@@ -234,21 +395,35 @@ strings_equal:
     pop ax
     ret
 
+; Estrutura de dados para armazenar arquivos
+max_files equ 10
+filename_length equ 12
+file_content_length equ 512
+
+file_table:
+    times max_files * (filename_length + file_content_length) db 0
+file_count db 0
+
 ; Mensagens para o sistema
 msg_welcome db "Bem-vindo ao micro-os!", 0
-msg_help db "Comandos disponíveis: help, cls, reboot, sair, editar", 0
+msg_help db "Comandos disponíveis: help, cls, reboot, exit, ls, echo, edit", 0
 msg_unknown db "Comando desconhecido!", 0
 msg_enter_filename db "Digite o nome do arquivo: ", 0
-msg_editing db "Editando... Digite e pressione Enter para salvar.", 0
+msg_editing db "Editando... Pressione Ctrl+S para salvar ou Ctrl+Q para sair.", 0
 msg_saved db "Arquivo salvo!", 0
+msg_file_not_found db "Arquivo não encontrado.", 0
+msg_too_many_files db "Limite de arquivos atingido.", 0
+msg_no_files db "Nenhum arquivo encontrado.", 0
 prompt db "> ", 0
 command_buffer times 32 db 0
-file_content_buffer times 512 db 0  ; Buffer para o conteúdo do arquivo
-filename_buffer times 12 db 0       ; Buffer para o nome do arquivo
+file_content_buffer times 512 db 0
+filename_buffer times 12 db 0
 
 ; Comandos para comparação
 msg_help_command db "help", 0
 msg_cls_command db "cls", 0
 msg_reboot_command db "reboot", 0
-msg_exit_command db "sair", 0
-msg_edit_command db "editar", 0
+msg_exit_command db "exit", 0
+msg_ls_command db "ls", 0
+msg_echo_command db "echo", 0
+msg_edit_command db "edit", 0
