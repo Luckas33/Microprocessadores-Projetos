@@ -2,6 +2,8 @@
 
 Este projeto tem como foco a compreensão da inicialização de sistemas operacionais e a interação com hardware em baixo nível. Ele pode ser expandido no futuro para suportar mais funcionalidades.
 
+Link do video de demonstração: https://youtu.be/wSxDrKkWo8o
+
 ## Equipe:
 
 * Lucas de Oliveira Sobral - 556944
