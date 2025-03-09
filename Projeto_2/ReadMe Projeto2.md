@@ -2,6 +2,8 @@
 
 Este projeto tem como foco a compreensão da inicialização de sistemas operacionais e a interação com hardware em baixo nível. Ele pode ser expandido no futuro para suportar mais funcionalidades.
 
+Link do video de demonstração: https://youtu.be/wSxDrKkWo8o
+
 ## Equipe:
 
 * Lucas de Oliveira Sobral - 556944
@@ -49,8 +51,8 @@ O kernel fornece uma interface de linha de comando para interagir com o sistema.
   * `cls`: Limpa a tela.
   * `reboot`: Reinicia o computador.
   * `exit`: Entra em modo de espera (halt).
-  * `help>`: Exibe os comandos disponíveis.
-  * `edit`: Chamarar um editor de texto.
+  * `help`: Exibe os comandos disponíveis.
+  * `editar`: Chamarar um editor de texto.
 
 #### Principais Funções:
 
