@@ -35,15 +35,15 @@ Criar um bootloader e um nano kernel de um sistema operacional minimalista.
 - Funções auxiliares como `print_string`, `get_string` e `clear_screen`.
 
 ---
-##Projeto 3 - Microprocessadores
+## Projeto 3 - Microprocessadores
 
-###Sistema de Controle com Microprocessador Intel 8086
+### Sistema de Controle com Microprocessador Intel 8086
 
-###Descrição
+### Descrição
 
 Este projeto consiste no desenvolvimento de um sistema de controle utilizando o microprocessador Intel 8086. O foco está na integração de periféricos como o CI 8255A, além do uso de circuitos lógicos para endereçamento e controle.
 
-###Funcionalidades
+### Funcionalidades
 
 📟 Leitura de sinais digitais a partir de um teclado matricial.
 
@@ -51,7 +51,7 @@ Este projeto consiste no desenvolvimento de um sistema de controle utilizando o 
 
 🏷️ Decodificação de endereços utilizando o CI 74LS138.
 
-##Como Executar
+## Como Executar
 
 Configure o hardware conectando o 8086 aos periféricos.
 
@@ -59,7 +59,7 @@ Compile e grave o código no sistema.
 
 Teste a interação via teclado matricial.
 
-##Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 Processador: Intel 8086
 
